@@ -4,12 +4,12 @@ import React, { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { 
   RefreshCw, Plus, 
-  AlertCircle, CheckCircle2,
-  Calendar, CreditCard,
+  AlertCircle,
+  Calendar,
   ChevronRight
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { format, subMonths, startOfMonth } from 'date-fns'
+import { format, subMonths } from 'date-fns'
 
 interface Subscription {
   merchant: string
@@ -37,7 +37,7 @@ export default function SubscriptionsPage() {
     
     const merchantMap: Record<string, { amounts: number[], category: string, dates: string[] }> = {}
     
-    txData.transactions.forEach((tx: any) => {
+    txData.transactions.forEach((tx: { is_debit: boolean; merchant: string; category: string; amount: number; date: string }) => {
       if (!tx.is_debit || !tx.merchant) return
       if (!merchantMap[tx.merchant]) {
         merchantMap[tx.merchant] = { amounts: [], category: tx.category, dates: [] }
@@ -177,7 +177,7 @@ export default function SubscriptionsPage() {
           <div>
             <h3 className="text-lg font-display text-white">Potential Savings Identified</h3>
             <p className="text-sm font-mono text-text-muted mt-1 leading-relaxed">
-              We noticed 2 subscriptions that haven't been "used" (no associated activity) in the last 60 days. 
+              We noticed 2 subscriptions that haven&apos;t been &quot;used&quot; (no associated activity) in the last 60 days. 
               You could save <span className="text-red-400 font-bold">₹1,249/mo</span> by cancelling them.
             </p>
             <button className="mt-4 text-xs font-bold font-ui text-red-400 hover:underline">
