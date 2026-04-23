@@ -75,9 +75,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   key={link.name}
                   href={link.href}
                   className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                    isActive 
-                      ? 'bg-brand-green/10 text-brand-green border-l-2 border-brand-green rounded-l-none' 
-                      : `${(link as any).color || 'text-text-muted'} hover:bg-[#1C2030] hover:text-white`
+                      isActive 
+                        ? 'bg-brand-green/10 text-brand-green border-l-2 border-brand-green rounded-l-none' 
+                        : `${(link as { color?: string }).color || 'text-text-muted'} hover:bg-[#1C2030] hover:text-white`
                   }`}
                 >
                   <Icon className="w-4 h-4" />

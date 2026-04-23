@@ -3,16 +3,15 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
-  User, Bell, Tag, Building2, Zap, Shield, AlertTriangle, 
-  Pencil, Check, Download, Trash2, Plus, Info, Lightbulb, 
-  ChevronRight, LogOut, Globe, Wallet, Target as TargetIcon,
-  Smartphone, Mail, Lock, ShieldCheck, HelpCircle
+  Pencil, Check, Download, Trash2, Plus, Lightbulb, 
+  ChevronRight, Target as TargetIcon,
+  ShieldCheck, Lock,
+  User, Bell, Tag, Building2, Zap, Shield, AlertTriangle
 } from 'lucide-react'
 import * as Switch from '@radix-ui/react-switch'
 import * as Select from '@radix-ui/react-select'
 import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import * as Avatar from '@radix-ui/react-avatar'
-import { useQueryClient } from '@tanstack/react-query'
 import { useProfile, useUpdateProfile, useNotificationPrefs, useUpdateNotifications, useCustomCategories, useCreateCategory, useDeleteCategory } from '@/hooks/useSettings'
 import { useSubscription } from '@/hooks/useSubscription'
 import { useToast } from '@/components/ui/toast'
@@ -21,7 +20,7 @@ import { useRouter } from 'next/navigation'
 
 type SettingsTab = 'profile' | 'notifications' | 'categories' | 'accounts' | 'subscription' | 'data' | 'danger'
 
-const TABS: { id: SettingsTab; label: string; icon: any; color?: string }[] = [
+const TABS: { id: SettingsTab; label: string; icon: React.ComponentType<{ className?: string }>; color?: string }[] = [
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'categories', label: 'Categories', icon: Tag },
@@ -100,7 +99,6 @@ const ProfileSection = () => {
   const updateProfile = useUpdateProfile()
   const { toast } = useToast()
   
-  const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState('')
   const [income, setIncome] = useState('')
 
@@ -111,11 +109,11 @@ const ProfileSection = () => {
     }
   }, [data])
 
-  const handleSave = async (updates: any) => {
+  const handleSave = async (updates: Partial<{ full_name: string; monthly_income_estimate: string | number; currency: string; financial_goal_type: string }>) => {
     try {
       await updateProfile.mutateAsync(updates)
       toast('✓ Settings saved', undefined, 'success')
-    } catch (err) {
+    } catch {
       toast('Error saving settings', undefined, 'error')
     }
   }
@@ -280,7 +278,7 @@ const NotificationsSection = () => {
 }
 
 const CategoriesSection = () => {
-  const { data: rules, isLoading } = useCustomCategories()
+  const { data: rules } = useCustomCategories()
   const createCategory = useCreateCategory()
   const deleteCategory = useDeleteCategory()
   const { toast } = useToast()
@@ -297,8 +295,8 @@ const CategoriesSection = () => {
       setPattern('')
       setCategory('')
       toast('✓ Rule added', undefined, 'success')
-    } catch (err: any) {
-      toast(err.message, undefined, 'error')
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Error adding rule', undefined, 'error')
     }
   }
 
@@ -312,8 +310,8 @@ const CategoriesSection = () => {
       <div className="bg-brand-green/5 rounded-xl p-5 border border-brand-green/10 flex gap-4 mb-10">
         <Lightbulb className="w-5 h-5 text-brand-green shrink-0 mt-1" />
         <p className="text-[11px] font-mono text-text-muted leading-relaxed">
-          When a transaction description contains your merchant pattern, it's always assigned to your chosen category — no AI needed. <br/>
-          <span className="text-brand-green opacity-70 italic mt-2 block">Example: 'CANTEEN' → Food & Dining.</span>
+          When a transaction description contains your merchant pattern, it&apos;s always assigned to your chosen category — no AI needed. <br/>
+          <span className="text-brand-green opacity-70 italic mt-2 block">Example: &apos;CANTEEN&apos; → Food & Dining.</span>
         </p>
       </div>
 
@@ -340,7 +338,7 @@ const CategoriesSection = () => {
 
       <div className="space-y-3">
         <AnimatePresence mode="popLayout">
-          {rules?.map((rule: any) => (
+          {rules?.map((rule: { id: string; merchant_pattern: string; category: string }) => (
             <motion.div 
               key={rule.id}
               layout
@@ -350,7 +348,7 @@ const CategoriesSection = () => {
               className="bg-surface2/50 border border-border/40 rounded-lg px-4 py-3 flex items-center justify-between hover:bg-surface2 transition-colors group"
             >
               <div className="flex items-center gap-3">
-                <span className="font-mono text-xs text-brand-green bg-brand-green/10 px-2 py-0.5 rounded">"{rule.merchant_pattern}"</span>
+                <span className="font-mono text-xs text-brand-green bg-brand-green/10 px-2 py-0.5 rounded">&quot;{rule.merchant_pattern}&quot;</span>
                 <ChevronRight className="w-3 h-3 text-text-muted" />
                 <span className="font-mono text-xs text-white">{rule.category}</span>
               </div>
@@ -479,7 +477,7 @@ const SubscriptionSection = () => {
 
   if (isLoading) return <div className="h-48 bg-surface2 rounded-2xl animate-pulse" />
 
-  const isPro = sub?.plan === 'pro'
+  const isPro = sub?.plan?.startsWith('pro')
   const isCancelled = sub?.status === 'cancelled'
 
   return (
@@ -502,7 +500,7 @@ const SubscriptionSection = () => {
           {isPro ? (
             <div className="text-right">
               <p className="text-xl font-display text-white">{sub?.plan?.includes('annual') ? '₹799/yr' : '₹69/mo'}</p>
-              <p className="text-[10px] font-mono text-text-muted mt-1">Renews on {sub?.current_period_end ? new Date(sub.current_period_end).toLocaleDateString() : 'N/A'}</p>
+              <p className="text-[10px] font-mono text-text-muted mt-1">Renews on {sub?.nextBillingDate ? new Date(sub.nextBillingDate).toLocaleDateString() : 'N/A'}</p>
             </div>
           ) : (
             <div className="text-right">
@@ -547,12 +545,16 @@ const DataSection = () => {
   const [exportingCsv, setExportingCsv] = useState(false)
 
   const handleExport = async (format: 'json' | 'csv') => {
-    if (format === 'csv' && sub?.plan !== 'pro') {
+    if (format === 'csv' && !sub?.plan?.startsWith('pro')) {
        toast('Pro plan required', 'CSV export is a Pro feature.', 'error')
        return
     }
 
-    format === 'json' ? setExportingJson(true) : setExportingCsv(true)
+    if (format === 'json') {
+      setExportingJson(true)
+    } else {
+      setExportingCsv(true)
+    }
     
     try {
       const res = await fetch(`/api/settings/export?format=${format}`)
@@ -567,7 +569,7 @@ const DataSection = () => {
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-    } catch (err) {
+    } catch {
       toast('Export failed', undefined, 'error')
     } finally {
       setExportingJson(false)
@@ -592,11 +594,11 @@ const DataSection = () => {
 
       <SettingRow label="Export Transactions (CSV)" description="All transactions in spreadsheet format — Pro only">
         <div className="flex items-center gap-3">
-          {sub?.plan !== 'pro' && <Lock className="w-3 h-3 text-text-muted" />}
+          {!sub?.plan?.startsWith('pro') && <Lock className="w-3 h-3 text-text-muted" />}
           <button 
             onClick={() => handleExport('csv')}
             disabled={exportingCsv}
-            className={`flex items-center gap-2 bg-surface2 border border-border px-4 py-2 rounded-md text-xs font-mono transition-colors ${sub?.plan === 'pro' ? 'text-white hover:border-brand-green/40' : 'text-text-muted opacity-50'}`}
+            className={`flex items-center gap-2 bg-surface2 border border-border px-4 py-2 rounded-md text-xs font-mono transition-colors ${sub?.plan?.startsWith('pro') ? 'text-white hover:border-brand-green/40' : 'text-text-muted opacity-50'}`}
           >
             {exportingCsv ? <div className="w-3 h-3 border border-text-muted border-t-transparent animate-spin rounded-full" /> : <Download className="w-3 h-3" />}
             Download CSV
@@ -644,7 +646,7 @@ const DangerSection = () => {
       })
       if (!res.ok) throw new Error('Deletion failed')
       router.push('/goodbye')
-    } catch (err) {
+    } catch {
       toast('Deletion failed', undefined, 'error')
       setLoading(false)
     }
@@ -659,7 +661,7 @@ const DangerSection = () => {
       })
       if (!res.ok) throw new Error('Clear failed')
       toast('All transactions cleared', undefined, 'success')
-    } catch (err) {
+    } catch {
       toast('Failed to clear transactions', undefined, 'error')
     }
   }

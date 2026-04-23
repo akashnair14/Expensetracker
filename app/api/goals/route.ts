@@ -41,9 +41,10 @@ export async function GET() {
       totalSaved, 
       totalTarget 
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Goals GET error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
@@ -79,8 +80,9 @@ export async function POST(request: Request) {
     if (error) throw error
 
     return NextResponse.json(goal)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Goals POST error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

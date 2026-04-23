@@ -214,7 +214,7 @@ export default function AnalyticsPage() {
 
   const totalSpent = MOCK_CATEGORIES.reduce((acc, cat) => acc + cat.value, 0)
   const savingsRate = 32
-  const { isPro, isLoading } = usePlanGate()
+  const { isPro } = usePlanGate()
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
   const [upgradeReason, setUpgradeReason] = useState<'analytics' | 'upload_limit'>('analytics')
 

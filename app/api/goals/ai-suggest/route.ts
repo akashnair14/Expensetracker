@@ -75,7 +75,7 @@ Return ONLY this JSON format:
       // Fallback
       const allocations = (goals as Goal[]).map(g => ({
         goal_id: g.id,
-        suggested_amount: suggestMonthlyContribution(g, monthlySavingsAvailable),
+        suggested_amount: suggestMonthlyContribution(g),
         reasoning: "Based on a standard 12-month timeline or your deadline."
       }))
       
@@ -86,8 +86,9 @@ Return ONLY this JSON format:
         advice: "We're using a standard calculation because the AI advisor is currently unavailable. Try to save consistently to reach your goals faster."
       })
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('AI Suggest route error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Upload as UploadIcon, X, FileSearch, Table2, Sparkles, 
-  CheckCircle, FileText, FileSpreadsheet, Camera, Lock, AlertCircle 
+  CheckCircle, FileText, FileSpreadsheet, Lock, AlertCircle 
 } from 'lucide-react'
 import { usePlanGate } from '@/hooks/useSubscription'
 import UpgradeModal from '@/components/subscription/UpgradeModal'
@@ -368,7 +368,7 @@ export default function UploadPage() {
                           if (!res.ok) throw new Error('Import failed')
                           setUploadState('done')
                           router.push('/dashboard')
-                        } catch (err) {
+                        } catch {
                           alert('Failed to import transactions')
                           setUploadState('review')
                         }

@@ -26,7 +26,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Goal not found' }, { status: 404 })
     }
 
-    const updates: any = {
+    const updates: Record<string, string | number | null> = {
       name: body.name,
       target_amount: body.target_amount,
       deadline: body.deadline,
@@ -62,9 +62,10 @@ export async function PATCH(
       .limit(6)
 
     return NextResponse.json(computeGoalStats(updatedGoal, contributions || []))
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Goal PATCH error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
@@ -86,8 +87,9 @@ export async function DELETE(
     if (error) throw error
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Goal DELETE error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -33,7 +33,7 @@ export default function ReportsPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [genStep, setGenStep] = useState(0)
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
-  const { isPro, isLoading } = usePlanGate()
+  const { isPro } = usePlanGate()
 
   const currentMonth = format(new Date(), 'yyyy-MM')
 

@@ -1,12 +1,11 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
-  Sparkles, Plus, Target, Calendar, Clock, Edit3, 
-  Trash2, MoreVertical, CheckCircle2, Pause, Play,
-  ChevronDown, ChevronUp, ArrowRight, Loader2, Info,
-  MessageSquare
+  ChevronDown, ChevronUp,
+  MessageSquare, Save, X,
+  Sparkles, Plus, Target, Calendar, Clock, Edit3, Trash2, MoreVertical, CheckCircle2, Pause, Play
 } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useGoals, useContribute, useDeleteGoal, useUpdateGoal, useAISuggestions } from '@/hooks/useGoals'
@@ -25,7 +24,7 @@ export default function GoalsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<GoalWithStats | undefined>(undefined)
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false)
-  const [aiResult, setAiResult] = useState<any>(null)
+  const [aiResult, setAiResult] = useState<{ monthly_savings_available: number; allocations: { goal_id: string; suggested_amount: number; reasoning: string }[]; advice?: string } | null>(null)
   const [isCompletedExpanded, setIsCompletedExpanded] = useState(false)
 
   const [isDemoMode, setIsDemoMode] = useState(false)
@@ -43,14 +42,14 @@ export default function GoalsPage() {
   const handleApplyAllocation = (goalId: string, amount: number) => {
     updateGoal({ id: goalId, monthly_contribution: amount })
     // Remove from AI result list locally
-    setAiResult((prev: any) => ({
+    setAiResult((prev) => prev ? ({
       ...prev,
-      allocations: prev.allocations.filter((a: any) => a.goal_id !== goalId)
-    }))
+      allocations: prev.allocations.filter(a => a.goal_id !== goalId)
+    }) : null)
   }
 
   const handleApplyAll = () => {
-    aiResult.allocations.forEach((a: any) => {
+    aiResult?.allocations.forEach(a => {
       updateGoal({ id: a.goal_id, monthly_contribution: a.suggested_amount })
     })
     setIsAIPanelOpen(false)
@@ -204,7 +203,7 @@ export default function GoalsPage() {
 
                     <div className="flex flex-col gap-4">
                       <h3 className="text-xs font-mono text-text-muted uppercase tracking-widest px-1">Goal Allocations</h3>
-                      {aiResult.allocations.map((a: any) => {
+                      {aiResult.allocations.map((a: { goal_id: string; suggested_amount: number; reasoning: string }) => {
                         const goal = activeGoals.find(g => g.id === a.goal_id)
                         if (!goal) return null
                         return (
@@ -580,9 +579,10 @@ function EmptyState({ onCreate, onSeeExample }: { onCreate: () => void, onSeeExa
   )
 }
 
-const DEMO_GOALS: any[] = [
+const DEMO_GOALS: GoalWithStats[] = [
   {
     id: 'demo-1',
+    user_id: 'demo',
     name: 'MacBook Pro M3',
     emoji: '💻',
     target_amount: 180000,
@@ -597,10 +597,14 @@ const DEMO_GOALS: any[] = [
     priority: 1,
     color: '#4D9FFF',
     status: 'active',
-    contributionHistory: []
+    contributionHistory: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    completed_at: null
   },
   {
     id: 'demo-2',
+    user_id: 'demo',
     name: 'Emergency Fund',
     emoji: '🛡️',
     target_amount: 300000,
@@ -615,10 +619,14 @@ const DEMO_GOALS: any[] = [
     priority: 2,
     color: '#00E5A0',
     status: 'active',
-    contributionHistory: []
+    contributionHistory: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    completed_at: null
   },
   {
     id: 'demo-3',
+    user_id: 'demo',
     name: 'Goa Trip',
     emoji: '🏖️',
     target_amount: 40000,
@@ -633,7 +641,10 @@ const DEMO_GOALS: any[] = [
     priority: 3,
     color: '#FF8C42',
     status: 'active',
-    contributionHistory: []
+    contributionHistory: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    completed_at: null
   }
 ]
 
@@ -660,11 +671,3 @@ function AISkeleton() {
   )
 }
 
-function X({ className }: { className?: string }) {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
-  )
-}

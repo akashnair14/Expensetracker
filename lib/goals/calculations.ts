@@ -37,8 +37,7 @@ export function computeGoalStats(
 
 // Suggest a monthly contribution based on deadline or a default 12-month horizon
 export function suggestMonthlyContribution(
-  goal: Goal,
-  _currentMonthlySavings: number  // derived from transaction history
+  goal: Goal
 ): number {
   const remaining = goal.target_amount - goal.saved_amount
   if (remaining <= 0) return 0

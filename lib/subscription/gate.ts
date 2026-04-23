@@ -77,6 +77,25 @@ export async function assertCanUseAI(userId: string, supabase: SupabaseClient) {
   }
 }
 
+// Throws an error if user does not have the required plan
+export async function assertPlan(userId: string, requiredPlan: 'pro', supabase?: SupabaseClient) {
+  // If no supabase client provided, create one (server side)
+  let client = supabase
+  if (!client) {
+    const { createClient } = await import('@/lib/db/server')
+    client = createClient()
+  }
+
+  const subscription = await getUserSubscription(userId, client)
+  if (requiredPlan === 'pro' && !subscription.isPro) {
+    throw new SubscriptionLimitError(
+      'pro_required',
+      'This feature requires a Pro subscription.',
+      subscription
+    )
+  }
+}
+
 export class SubscriptionLimitError extends Error {
   code: string
   subscription: UserSubscription

@@ -82,15 +82,15 @@ export default function DashboardPage() {
   const savingsRate = totalIncome > 0 ? Math.round((netSavings / totalIncome) * 100) : 0
   
   // Budget logic
-  const currentMonthBudgets = budgets?.filter((b: any) => b.month === now.toISOString().slice(0, 7)) || []
-  const totalBudgetLimit = currentMonthBudgets.reduce((acc: number, b: any) => acc + Number(b.amount), 0) || 60000
+  const currentMonthBudgets = budgets?.filter((b: { month: string }) => b.month === now.toISOString().slice(0, 7)) || []
+  const totalBudgetLimit = currentMonthBudgets.reduce((acc: number, b: { amount: number | string }) => acc + Number(b.amount), 0) || 60000
   const budgetRemainingPercent = totalBudgetLimit > 0 ? Math.max(0, Math.round(((totalBudgetLimit - totalSpent) / totalBudgetLimit) * 100)) : 0
 
   const pieData = txData?.categoryBreakdown 
     ? Object.entries(txData.categoryBreakdown).map(([name, value]) => ({ name, value: Number(value) }))
     : []
 
-  const recentTransactions = txData?.transactions?.slice(0, 5).map((tx: any) => ({
+  const recentTransactions = txData?.transactions?.slice(0, 5).map((tx: { id: string, date: string, merchant: string, description: string, category: string, amount: number | string, is_debit: boolean }) => ({
     id: tx.id,
     date: format(new Date(tx.date), 'MMM dd'),
     merchant: tx.merchant || tx.description.split(' ')[0],
@@ -305,7 +305,7 @@ export default function DashboardPage() {
                         </div>
                       </td>
                     </tr>
-                  ) : recentTransactions.map((tx: any) => (
+                  ) : recentTransactions.map((tx: { id: string, date: string, merchant: string, category: string, isDebit: boolean, amount: number }) => (
                     <tr key={tx.id} className="border-b border-border/50 hover:bg-surface2/50 transition-colors">
                       <td className="py-4 text-sm text-text-muted font-mono">{tx.date}</td>
                       <td className="py-4 text-sm text-white font-ui">{tx.merchant}</td>

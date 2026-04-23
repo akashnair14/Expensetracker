@@ -2,14 +2,14 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, X, Star, Zap, ArrowRight, ShieldCheck, HelpCircle } from 'lucide-react'
+import { Check, X, Star, ArrowRight } from 'lucide-react'
 import { PLANS, PlanId } from '@/lib/subscription/plans'
 import { useSubscription } from '@/hooks/useSubscription'
 import { useQueryClient } from '@tanstack/react-query'
 
 export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly')
-  const { data: subscription, isLoading } = useSubscription()
+  const { data: subscription } = useSubscription()
   const queryClient = useQueryClient()
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
 
@@ -219,7 +219,7 @@ export default function PricingPage() {
   )
 }
 
-function FeatureItem({ icon: Icon, text, muted, color = "text-white/90" }: { icon: any, text: string, muted?: boolean, color?: string }) {
+function FeatureItem({ icon: Icon, text, muted, color = "text-white/90" }: { icon: React.ComponentType<{ className?: string }>, text: string, muted?: boolean, color?: string }) {
   return (
     <div className={`flex items-start gap-3 ${muted ? 'opacity-40 line-through' : ''}`}>
       <div className={`mt-0.5 shrink-0 ${muted ? 'text-text-muted' : 'text-brand-green'}`}>

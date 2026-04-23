@@ -79,7 +79,7 @@ export async function GET(request: Request) {
         tx.category,
         tx.amount,
         tx.is_debit ? 'Debit' : 'Credit',
-        `"${(tx as any).accounts?.bank_name} - ${(tx as any).accounts?.account_number_last4}"`,
+        `"${(tx as unknown as { accounts: { bank_name: string, account_number_last4: string } }).accounts?.bank_name} - ${(tx as unknown as { accounts: { bank_name: string, account_number_last4: string } }).accounts?.account_number_last4}"`,
         `"${(tx.notes || '').replace(/"/g, '""')}"`
       ])
 
@@ -97,8 +97,9 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ error: 'Invalid format' }, { status: 400 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Export error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

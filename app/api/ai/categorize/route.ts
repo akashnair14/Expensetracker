@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     }
 
     // Apply categories
-    const transactionsToInsert = transactions.map((tx: Record<string, any>) => {
+    const transactionsToInsert = transactions.map((tx: { merchant?: string; [key: string]: unknown }) => {
       let finalCategory = 'Other'
       
       const merchantStr = tx.merchant || 'UNKNOWN'

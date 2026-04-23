@@ -49,7 +49,7 @@ export async function POST(
     const newSavedAmount = Number(goal.saved_amount) + Number(amount)
     const isCompleted = newSavedAmount >= Number(goal.target_amount)
     
-    const updates: any = {
+    const updates: Record<string, string | number | null> = {
       saved_amount: newSavedAmount,
       updated_at: new Date().toISOString()
     }
@@ -81,8 +81,9 @@ export async function POST(
       updatedGoal: computeGoalStats(updatedGoal, history || []),
       justCompleted: isCompleted && goal.status === 'active'
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Goal contribution error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

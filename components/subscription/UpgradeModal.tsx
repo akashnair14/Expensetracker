@@ -4,7 +4,6 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Lock, X, Star, Zap } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
 
 interface UpgradeModalProps {
   isOpen: boolean
@@ -12,7 +11,7 @@ interface UpgradeModalProps {
   reason?: 'upload_limit' | 'ai_reports' | 'analytics' | 'export'
 }
 
-const REASONS = {
+const REASONS: Record<string, { title: string; description: string }> = {
   upload_limit: {
     title: "You've used all 5 free uploads",
     description: "Upgrade to Pro for unlimited uploads and AI insights."
@@ -34,10 +33,8 @@ const REASONS = {
 export default function UpgradeModal({ isOpen, onClose, reason = 'upload_limit' }: UpgradeModalProps) {
   const router = useRouter()
   const content = REASONS[reason]
-  const [isProcessing, setIsProcessing] = useState<string | null>(null)
-
-  const handleUpgrade = (_plan: 'monthly' | 'annual') => {
-    setIsProcessing(_plan)
+  
+  const handleUpgrade = () => {
     router.push('/pricing')
     onClose()
   }
@@ -66,20 +63,20 @@ export default function UpgradeModal({ isOpen, onClose, reason = 'upload_limit' 
                   <button onClick={onClose} className="absolute top-4 right-4 p-2 text-text-muted hover:text-white transition-colors">
                     <X className="w-5 h-5" />
                   </button>
-
+ 
                   <div className="flex flex-col items-center text-center">
                     <div className="w-14 h-14 rounded-full bg-brand-green/10 flex items-center justify-center border border-brand-green/20 mb-6">
                       <Lock className="w-6 h-6 text-brand-green" />
                     </div>
-
+ 
                     <h2 className="text-xl font-display text-white mb-2">{content.title}</h2>
                     <p className="text-sm font-mono text-text-muted mb-8 leading-relaxed">
                       {content.description}
                     </p>
-
+ 
                     <div className="grid grid-cols-1 gap-4 w-full">
                       <button 
-                        onClick={() => handleUpgrade('monthly')}
+                        onClick={() => handleUpgrade()}
                         className="group flex items-center justify-between p-4 rounded-xl border border-border bg-surface hover:border-brand-green/40 hover:bg-surface2 transition-all text-left"
                       >
                         <div className="flex flex-col">
@@ -91,9 +88,9 @@ export default function UpgradeModal({ isOpen, onClose, reason = 'upload_limit' 
                         </div>
                         <span className="text-xs font-ui text-brand-green font-bold group-hover:hidden">Upgrade</span>
                       </button>
-
+ 
                       <button 
-                        onClick={() => handleUpgrade('annual')}
+                        onClick={() => handleUpgrade()}
                         className="group flex items-center justify-between p-4 rounded-xl border-2 border-brand-green/30 bg-brand-green/5 hover:border-brand-green transition-all text-left relative overflow-hidden"
                       >
                         <div className="absolute top-0 right-0 bg-brand-green text-[#0D0F14] text-[9px] font-bold px-2 py-0.5 rounded-bl">BEST VALUE</div>
