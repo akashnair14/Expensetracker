@@ -2,8 +2,9 @@ import { BankParser, ParsedTransaction } from '@/types/parsers'
 import { hdfcParser } from './hdfc.parser'
 import { sbiParser } from './sbi.parser'
 import { iciciParser } from './icici.parser'
+import { axisParser } from './axis.parser'
 
-export const parsers: BankParser[] = [hdfcParser, sbiParser, iciciParser]
+export const parsers: BankParser[] = [hdfcParser, sbiParser, iciciParser, axisParser]
 
 export async function parseStatement(
   file: File,

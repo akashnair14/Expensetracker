@@ -18,6 +18,9 @@ const nextConfig = {
       },
     ],
   },
+  experimental: {
+    serverComponentsExternalPackages: ['pdfjs-dist'],
+  },
 };
 
 export default withPWA(nextConfig);

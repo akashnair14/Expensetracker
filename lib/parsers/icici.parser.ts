@@ -1,15 +1,137 @@
 import * as XLSX from 'xlsx'
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { BankParser, ParsedTransaction } from '@/types/parsers'
+import { getPdfJs, getPdfConfig } from './pdf-config'
 
 export const iciciParser: BankParser = {
   bankName: 'ICICI Bank',
-  supportedFormats: ['csv', 'xlsx'],
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  detectFormat(fileName: string, _firstBytes: Uint8Array): boolean {
+  supportedFormats: ['pdf', 'csv', 'xlsx'],
+  detectFormat(fileName: string, _: Uint8Array): boolean {
     return fileName.toLowerCase().includes('icici')
   },
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async parse(buffer: ArrayBuffer, _fileName: string): Promise<ParsedTransaction[]> {
+  async parse(buffer: ArrayBuffer, fileName: string): Promise<ParsedTransaction[]> {
+    if (fileName.toLowerCase().endsWith('.pdf')) {
+      return (this as any).parsePdf(buffer) // eslint-disable-line @typescript-eslint/no-explicit-any
+    }
+    return (this as any).parseExcel(buffer) // eslint-disable-line @typescript-eslint/no-explicit-any
+  },
+
+  async parsePdf(buffer: ArrayBuffer): Promise<ParsedTransaction[]> {
+    const pdfjs = await getPdfJs()
+    const data = new Uint8Array(buffer)
+    try {
+      const loadingTask = pdfjs.getDocument(await getPdfConfig(data))
+      
+      const pdf = await loadingTask.promise
+      const transactions: ParsedTransaction[] = []
+      
+      let withdrawalX = 0
+      let depositX = 0
+      let balanceX = 0
+      let remarksX = 0
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const textContent = await page.getTextContent()
+        const items = textContent.items as Array<{ str: string; transform: number[] }>
+        const linesMap: Record<number, Array<{ str: string; transform: number[] }>> = {}
+        
+        items.forEach(item => {
+          const y = Math.round(item.transform[5])
+          if (!linesMap[y]) linesMap[y] = []
+          linesMap[y].push(item)
+        })
+        
+        const sortedY = Object.keys(linesMap).map(Number).sort((a, b) => b - a)
+        
+        for (const y of sortedY) {
+          const lineItems = linesMap[y].sort((a, b) => a.transform[4] - b.transform[4])
+          const lineText = lineItems.map(item => item.str).join(' ').trim()
+          
+          // Detect headers
+          if (lineText.toLowerCase().includes('transaction date') && lineText.toLowerCase().includes('remarks')) {
+            lineItems.forEach(item => {
+              const str = item.str.toLowerCase()
+              const x = item.transform[4]
+              if (str.includes('withdrawal')) withdrawalX = x
+              if (str.includes('deposit')) depositX = x
+              if (str.includes('balance')) balanceX = x
+              if (str.includes('remarks')) remarksX = x
+            })
+            continue
+          }
+
+          // ICICI PDF Date format: DD.MM.YYYY
+          const dateMatch = lineText.match(/^(\d{2}\.\d{2}\.\d{4})/)
+          if (dateMatch) {
+            const dateStr = dateMatch[1]
+            const [dd, mm, yyyy] = dateStr.split('.')
+            const dateIso = `${yyyy}-${mm}-${dd}`
+            
+            let amount = 0
+            let is_debit = false
+            let balance = 0
+            let description = ''
+            
+            lineItems.forEach(item => {
+              const x = item.transform[4]
+              const val = parseFloat(item.str.replace(/,/g, ''))
+              
+              if (isNaN(val)) {
+                // Remarks column
+                if (remarksX && Math.abs(x - remarksX) < 100) {
+                  description += ' ' + item.str
+                } else if (!remarksX && x > 150 && x < 400) {
+                   description += ' ' + item.str
+                }
+              } else {
+                // Withdrawal, Deposit or Balance
+                if (withdrawalX && Math.abs(x - withdrawalX) < 30) {
+                  amount = val
+                  is_debit = true
+                } else if (depositX && Math.abs(x - depositX) < 30) {
+                  amount = val
+                  is_debit = false
+                } else if (balanceX && Math.abs(x - balanceX) < 30) {
+                  balance = val
+                } else if (!withdrawalX) {
+                  // Fallback heuristics if header detection failed
+                  if (x > 600 && x < 750) {
+                    amount = val
+                    is_debit = true
+                  } else if (x >= 750 && x < 850) {
+                    amount = val
+                    is_debit = false
+                  } else if (x >= 850) {
+                    balance = val
+                  }
+                }
+              }
+            })
+            
+            if (amount > 0) {
+              transactions.push({
+                date: dateIso,
+                amount: Math.abs(amount),
+                description: description.trim() || lineText.substring(10).trim(),
+                is_debit,
+                balance: balance || undefined
+              })
+            }
+          }
+        }
+      }
+      return transactions
+    } catch (error) {
+      console.error('ICICI PDF Parse Error:', error)
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'PasswordException') {
+        throw new Error('This PDF is password protected. Please upload a decrypted version of your ICICI Bank statement.')
+      }
+      throw new Error(`Failed to parse ICICI PDF: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  },
+
+  async parseExcel(buffer: ArrayBuffer): Promise<ParsedTransaction[]> {
     const workbook = XLSX.read(buffer, { type: 'buffer' })
     const sheetName = workbook.SheetNames[0]
     const sheet = workbook.Sheets[sheetName]
@@ -34,7 +156,8 @@ export const iciciParser: BankParser = {
         continue
       }
 
-      const dateParts = firstCol.split('/')
+      // Handle multiple separators
+      const dateParts = firstCol.split(/[./-]/)
       if (dateParts.length !== 3) continue
       const [dd, mm, yyRaw] = dateParts
       let yy = yyRaw
@@ -63,4 +186,4 @@ export const iciciParser: BankParser = {
     
     return transactions
   }
-}
+} as BankParser

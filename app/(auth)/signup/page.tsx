@@ -53,7 +53,8 @@ export default function SignupPage() {
         options: {
           data: {
             full_name: fullName
-          }
+          },
+          emailRedirectTo: `${window.location.origin}/callback`
         }
       })
 

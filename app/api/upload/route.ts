@@ -52,7 +52,12 @@ export async function POST(request: Request) {
     }
 
     const rawTransactions = await parseStatement(file, bankName)
+    console.log(`[Upload] Parsed ${rawTransactions.length} transactions from ${file.name} (${bankName})`)
     
+    if (rawTransactions.length === 0) {
+      return NextResponse.json({ error: 'No transactions found in this PDF. The statement format may not match the expected layout.' }, { status: 422 })
+    }
+
     const merchantsSet = new Set<string>()
     const transactions = rawTransactions.map(t => {
       const cleaned = t.description
@@ -107,8 +112,14 @@ export async function POST(request: Request) {
       uncachedMerchants 
     })
     
-  } catch (error: unknown) {
-    console.error('Upload error:', error)
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to process file' }, { status: 400 })
+  } catch (error) {
+    console.error('CRITICAL UPLOAD ERROR:', error)
+    if (error instanceof Error) {
+      console.error('Stack:', error.stack)
+    }
+    return NextResponse.json({ 
+      error: error instanceof Error ? error.message : 'Failed to process file',
+      details: error instanceof Error ? error.stack : undefined
+    }, { status: 500 })
   }
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Calendar, ArrowUpRight, ArrowDownRight, Sparkles, ArrowRight } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight, Sparkles, ArrowRight } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Legend, CartesianGrid } from 'recharts'
 import { format } from 'date-fns'
 import { createClient } from '@/lib/db/client'
@@ -42,8 +42,25 @@ export default function DashboardPage() {
   const supabase = createClient()
   const [user, setUser] = useState<import('@supabase/supabase-js').User | null>(null)
   const now = new Date()
-  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-  const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+  const [dateRange, setDateRange] = useState<'month' | '3months' | '6months' | 'all'>('all')
+
+  const getDateRange = () => {
+    if (dateRange === 'month') {
+      return {
+        start: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
+        end: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+      }
+    } else if (dateRange === '3months') {
+      const start = new Date(now); start.setMonth(start.getMonth() - 3)
+      return { start: start.toISOString().split('T')[0], end: now.toISOString().split('T')[0] }
+    } else if (dateRange === '6months') {
+      const start = new Date(now); start.setMonth(start.getMonth() - 6)
+      return { start: start.toISOString().split('T')[0], end: now.toISOString().split('T')[0] }
+    }
+    return { start: null, end: null } // All time
+  }
+
+  const { start: startDate, end: endDate } = getDateRange()
   const currentMonthStr = `${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()}`
 
   useEffect(() => {
@@ -52,10 +69,13 @@ export default function DashboardPage() {
 
   // Fetch from APIs as specified
   const { data: txData, isLoading: txLoading } = useQuery({
-    queryKey: ['transactions', user?.id, currentMonthStart],
+    queryKey: ['transactions', user?.id, startDate, endDate, dateRange],
     queryFn: async () => {
       if (!user?.id) return null
-      const res = await fetch(`/api/transactions?start_date=${currentMonthStart}&end_date=${currentMonthEnd}`)
+      const params = new URLSearchParams()
+      if (startDate) params.set('start_date', startDate)
+      if (endDate) params.set('end_date', endDate)
+      const res = await fetch(`/api/transactions?${params.toString()}`)
       if (!res.ok) return null
       return res.json()
     },
@@ -118,14 +138,25 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-display text-white">
-            Good morning, {user?.user_metadata?.full_name?.split(' ')[0] || 'User'} 👋
+            Good {now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening'}, {user?.user_metadata?.full_name?.split(' ')[0] || 'User'} 👋
           </h1>
-          <p className="text-text-muted font-mono mt-1">Here&apos;s your financial snapshot for {currentMonthStr.split(' ')[0]}</p>
+          <p className="text-text-muted font-mono mt-1">Here&apos;s your financial snapshot</p>
         </div>
-        <button className="flex items-center gap-2 bg-surface2 border border-border px-4 py-2 rounded-full hover:border-brand-green/50 transition-colors">
-          <Calendar className="w-4 h-4 text-brand-green" />
-          <span className="font-ui text-sm">{currentMonthStr}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {(['month', '3months', '6months', 'all'] as const).map(r => (
+            <button
+              key={r}
+              onClick={() => setDateRange(r)}
+              className={`px-3 py-1.5 rounded-full text-xs font-mono transition-colors ${
+                dateRange === r
+                  ? 'bg-brand-green text-[#0D0F14] font-bold'
+                  : 'bg-surface2 border border-border text-text-muted hover:border-brand-green/50'
+              }`}
+            >
+              {r === 'month' ? 'This Month' : r === '3months' ? '3 Months' : r === '6months' ? '6 Months' : 'All Time'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* SECTION 2 — 4 Key Metric Cards */}

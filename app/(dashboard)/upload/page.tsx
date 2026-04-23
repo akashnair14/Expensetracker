@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
-  Upload as UploadIcon, X, FileSearch, Table2, Sparkles, 
-  CheckCircle, FileText, FileSpreadsheet, Lock, AlertCircle 
+  Upload as UploadIcon, X, CheckCircle,
+  FileText, FileSpreadsheet, Lock, AlertCircle 
 } from 'lucide-react'
 import { usePlanGate } from '@/hooks/useSubscription'
 import UpgradeModal from '@/components/subscription/UpgradeModal'
@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation'
 import { User } from '@supabase/supabase-js'
 
 import { ParsedTransaction } from '@/types/parsers'
+import ProcessingSteps from '@/components/upload/ProcessingSteps'
 
 const BANKS = ["HDFC Bank", "SBI", "ICICI Bank", "Axis Bank", "Kotak Mahindra", "Yes Bank", "IndusInd", "Other"]
 
@@ -35,7 +36,7 @@ export default function UploadPage() {
   
   // review state
   const [transactions, setTransactions] = useState<TransactionPreview[]>([])
-  const [uploadData, setUploadData] = useState<{ jobId: string, uncachedMerchants: string[] } | null>(null)
+  const [parseWarning, setParseWarning] = useState<string | null>(null)
   
   const supabase = createClient()
   const router = useRouter()
@@ -75,6 +76,7 @@ export default function UploadPage() {
     setUploadState('parsing')
     
     try {
+      // ── Step 1 & 2: Upload and parse the PDF ──
       const formData = new FormData()
       formData.append('file', file)
       formData.append('bank_name', bank)
@@ -85,26 +87,56 @@ export default function UploadPage() {
         body: formData
       })
       
+      const contentType = res.headers.get('content-type')
+      const responseData = contentType?.includes('application/json') ? await res.json() : null
+
       if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.error || 'Failed to upload')
+        const errorMessage = responseData?.error || `Server Error (${res.status}): Please check the server logs.`
+        throw new Error(errorMessage)
       }
-      
-      const data = await res.json()
-      setUploadData(data)
-      
+
+      // Load the parsed transactions for display
       const { data: fileData } = await supabase.storage
         .from('statements')
-        .download(`${user.id}/temp/${data.jobId}.json`)
+        .download(`${user.id}/temp/${responseData.jobId}.json`)
         
       if (fileData) {
         const text = await fileData.text()
         const parsed = JSON.parse(text)
-        setTransactions(parsed.map((t: ParsedTransaction) => ({ ...t, category: 'Uncategorized' } as TransactionPreview)))
+        const mapped = parsed.map((t: ParsedTransaction) => ({ ...t, category: 'Uncategorized' } as TransactionPreview))
+        setTransactions(mapped)
+        if (mapped.length === 0) {
+          setParseWarning('The PDF was processed but no transactions could be extracted. The statement format may differ from expected. Please try selecting the correct bank.')
+          setUploadState('review')
+          return
+        }
       }
-      
-      setTimeout(() => setUploadState('review'), 1500)
-      
+
+      // ── Step 3: AI Categorization (auto, no button click needed) ──
+      // Small delay so the animation can visually show Step 3 activating
+      await new Promise(resolve => setTimeout(resolve, 3500))
+      setUploadState('importing')
+
+      const catRes = await fetch('/api/ai/categorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          jobId: responseData.jobId, 
+          uncachedMerchants: responseData.uncachedMerchants 
+        })
+      })
+
+      if (!catRes.ok) {
+        const catErr = await catRes.json().catch(() => ({}))
+        throw new Error(catErr.error || 'AI categorization failed')
+      }
+
+      // ── Done: redirect to dashboard ──
+      setUploadState('done')
+      // Small pause so user sees "Done" state briefly before redirect
+      await new Promise(resolve => setTimeout(resolve, 800))
+      router.push('/dashboard')
+
     } catch (error) {
       console.error(error)
       alert(error instanceof Error ? error.message : 'Upload failed')
@@ -272,114 +304,54 @@ export default function UploadPage() {
           </motion.div>
         )}
 
-        {(uploadState === 'parsing' || uploadState === 'review' || uploadState === 'importing') && (
+        {(uploadState === 'parsing' || uploadState === 'importing' || uploadState === 'done') && (
           <motion.div
             key="stage3"
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
             className="flex flex-col gap-6"
           >
-            <div className="bg-surface border border-border rounded-xl p-6 flex flex-col gap-6">
-              <div className="flex items-center justify-between mb-4 px-2 md:px-8">
-                {[
-                  { icon: FileSearch, label: "Reading file", active: uploadState === 'parsing', done: uploadState === 'review' },
-                  { icon: Table2, label: "Extracting data", active: uploadState === 'parsing', done: uploadState === 'review' },
-                  { icon: Sparkles, label: "AI categorization", active: uploadState === 'parsing', done: uploadState === 'review' },
-                ].map((step, i) => (
-                  <div key={i} className="flex flex-col items-center gap-3">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
-                      step.done ? 'bg-brand-green/20 text-brand-green' : step.active ? 'bg-[#4D9FFF]/20 text-[#4D9FFF] animate-pulse' : 'bg-surface2 text-text-muted'
-                    }`}>
-                      {step.done ? <CheckCircle className="w-6 h-6" /> : <step.icon className="w-5 h-5" />}
-                    </div>
-                    <span className={`text-[11px] font-mono text-center ${step.done || step.active ? 'text-white' : 'text-text-muted'}`}>
-                      {step.label}
-                    </span>
-                  </div>
-                ))}
-              </div>
+            <div className="bg-surface border border-border rounded-xl p-8 flex flex-col gap-8">
 
-              {(uploadState === 'review' || uploadState === 'importing') && transactions.length > 0 && (
-                <div className="animate-fadeIn mt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-ui text-white font-medium">Preview Transactions</h3>
-                    <span className="text-xs font-mono text-brand-green bg-brand-green/10 border border-brand-green/20 px-2.5 py-1 rounded-full">
-                      Found {transactions.length}
-                    </span>
-                  </div>
-                  
-                  <div className="w-full overflow-x-auto rounded-lg border border-border">
-                    <table className="w-full text-left whitespace-nowrap">
-                      <thead className="bg-surface2 border-b border-border">
-                        <tr className="text-text-muted text-[11px] uppercase tracking-wider font-mono">
-                          <th className="py-3 px-4 font-normal">Date</th>
-                          <th className="py-3 px-4 font-normal w-1/3">Description</th>
-                          <th className="py-3 px-4 font-normal">Category (AI)</th>
-                          <th className="py-3 px-4 font-normal text-right">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {transactions.slice(0, 10).map((tx, i) => (
-                          <tr key={i} className="border-b border-border/50 bg-surface last:border-0 hover:bg-surface2/30 transition-colors">
-                            <td className="py-3 px-4 text-xs font-mono text-text-muted">{tx.date}</td>
-                            <td className="py-3 px-4 text-xs font-ui text-white truncate max-w-[200px]" title={tx.description}>{tx.description}</td>
-                            <td className="py-3 px-4">
-                              <select className="bg-surface2 border border-border text-xs text-white rounded px-2 py-1.5 font-mono outline-none focus:border-brand-green/50">
-                                <option>{tx.category}</option>
-                                <option>Food & Dining</option>
-                                <option>Shopping</option>
-                                <option>Transport</option>
-                                <option>Entertainment</option>
-                                <option>Bills & Utilities</option>
-                                <option>Income</option>
-                              </select>
-                            </td>
-                            <td className={`py-3 px-4 text-xs font-mono text-right font-medium ${tx.is_debit ? 'text-white' : 'text-brand-green'}`}>
-                              {tx.is_debit ? '-' : '+'}₹{tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {transactions.length > 10 && (
-                    <p className="text-center text-xs font-mono text-text-muted mt-3">Showing 10 of {transactions.length} transactions</p>
-                  )}
+              {/* ── Animated step pipeline ── */}
+              <ProcessingSteps uploadState={uploadState} />
 
-                  <div className="flex items-center gap-4 mt-8">
-                    <button 
-                      onClick={() => setUploadState('idle')}
-                      className="flex-1 bg-surface2 text-white font-ui py-3 rounded-md hover:bg-surface2/80 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={async () => {
-                        setUploadState('importing')
-                        try {
-                          const res = await fetch('/api/ai/categorize', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ 
-                              jobId: uploadData?.jobId, 
-                              uncachedMerchants: uploadData?.uncachedMerchants 
-                            })
-                          })
-                          if (!res.ok) throw new Error('Import failed')
-                          setUploadState('done')
-                          router.push('/dashboard')
-                        } catch {
-                          alert('Failed to import transactions')
-                          setUploadState('review')
-                        }
-                      }}
-                      disabled={uploadState === 'importing'}
-                      className="flex-[2] bg-brand-green text-[#0D0F14] font-bold font-ui py-3 rounded-md hover:bg-brand-green/90 transition-colors shadow-lg shadow-brand-green/20 disabled:opacity-50"
-                    >
-                      {uploadState === 'importing' ? 'Importing...' : `Import All (${transactions.length})`}
-                    </button>
+              {/* ── Warning: parser returned 0 transactions ── */}
+              {!!parseWarning && (
+                <div className="animate-fadeIn text-center flex flex-col items-center gap-4 pt-2">
+                  <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6 text-yellow-400" />
                   </div>
+                  <p className="text-yellow-400 font-mono text-sm max-w-md">{parseWarning}</p>
+                  <button
+                    onClick={() => { setUploadState('selected'); setParseWarning(null); setTransactions([]) }}
+                    className="bg-surface2 text-white font-ui px-6 py-2.5 rounded-md hover:bg-surface2/80 transition-colors text-sm"
+                  >
+                    Try Again
+                  </button>
                 </div>
+              )}
+
+              {/* ── Auto-processing status (while importing) ── */}
+              {uploadState === 'importing' && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex flex-col items-center gap-3 py-4"
+                >
+                  <motion.div
+                    className="w-8 h-8 rounded-full border-2 border-brand-green/30 border-t-brand-green"
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
+                  />
+                  <p className="text-text-muted font-mono text-sm">
+                    {transactions.length > 0
+                      ? `Saving ${transactions.length} transactions & categorizing with AI...`
+                      : 'Finishing up...'}
+                  </p>
+                  <p className="text-[11px] text-text-muted/60 font-mono">Redirecting to dashboard shortly</p>
+                </motion.div>
               )}
             </div>
           </motion.div>
