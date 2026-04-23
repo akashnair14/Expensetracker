@@ -29,7 +29,8 @@ export async function POST(request: Request) {
       .download(`${user.id}/temp/${jobId}.json`)
 
     if (fileError || !fileData) {
-      throw new Error('Could not find temporary parsed data')
+      console.error('Categorize storage error:', fileError)
+      throw new Error(`Could not find temporary parsed data: ${fileError?.message || 'File is empty'}`)
     }
 
     const text = await fileData.text()

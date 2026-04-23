@@ -49,6 +49,7 @@ export async function POST(request: Request) {
       
     if (uploadError) {
       console.error('Storage upload error:', uploadError)
+      throw new Error(`Failed to upload original statement: ${uploadError.message}`)
     }
 
     const rawTransactions = await parseStatement(file, bankName)
@@ -94,11 +95,16 @@ export async function POST(request: Request) {
     }
 
     const tempPath = `${user.id}/temp/${jobId}.json`
-    await supabase.storage
+    const { error: tempError } = await supabase.storage
       .from('statements')
       .upload(tempPath, JSON.stringify(transactions), {
         contentType: 'application/json'
       })
+
+    if (tempError) {
+      console.error('Temp storage upload error:', tempError)
+      throw new Error(`Failed to save temporary data: ${tempError.message}`)
+    }
 
     await supabase.from('upload_usage').insert({
       user_id: user.id,
