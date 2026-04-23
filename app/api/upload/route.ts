@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     }
 
     const rawTransactions = await parseStatement(file, bankName)
-    console.log(`[Upload] Parsed ${rawTransactions.length} transactions from ${file.name} (${bankName})`)
+
     
     if (rawTransactions.length === 0) {
       return NextResponse.json({ error: 'No transactions found in this PDF. The statement format may not match the expected layout.' }, { status: 422 })

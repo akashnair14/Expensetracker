@@ -17,7 +17,7 @@ export const axisParser: BankParser = {
       const pdf = await loadingTask.promise
       const transactions: ParsedTransaction[] = []
 
-      console.log(`[AxisParser] PDF loaded, pages: ${pdf.numPages}`)
+
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         const page = await pdf.getPage(pageNum)
@@ -53,7 +53,7 @@ export const axisParser: BankParser = {
           const [dd, mm, yyyy] = rawDate.split(sep)
           const dateIso = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
 
-          console.log(`[AxisParser] Page ${pageNum} - Date line: "${lineText}"`)
+
 
           // Extract all numbers from the line (skip the date itself)
           const restOfLine = lineText.slice(dateMatch[0].length).trim()
@@ -108,7 +108,7 @@ export const axisParser: BankParser = {
 
           if (amount > 0) {
             const finalDescription = description || `Transaction on ${dateIso}`
-            console.log(`[AxisParser] Transaction: ${dateIso} | ${finalDescription} | ${is_debit ? 'DR' : 'CR'} ${amount}`)
+
             transactions.push({
               date: dateIso,
               amount: Math.abs(amount),
@@ -120,7 +120,7 @@ export const axisParser: BankParser = {
         }
       }
 
-      console.log(`[AxisParser] Total transactions found: ${transactions.length}`)
+
       return transactions
 
     } catch (error) {
