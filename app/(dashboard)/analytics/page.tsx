@@ -13,6 +13,9 @@ import {
   Bar, LineChart, Line, ReferenceLine 
 } from 'recharts'
 import { format, subDays } from 'date-fns'
+import { usePlanGate } from '@/hooks/useSubscription'
+import UpgradeModal from '@/components/subscription/UpgradeModal'
+import { Lock } from 'lucide-react'
 
 // --- Mock Data ---
 const MOCK_CASHFLOW = [
@@ -211,6 +214,25 @@ export default function AnalyticsPage() {
 
   const totalSpent = MOCK_CATEGORIES.reduce((acc, cat) => acc + cat.value, 0)
   const savingsRate = 32
+  const { isPro, isLoading } = usePlanGate()
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
+  const [upgradeReason, setUpgradeReason] = useState<'analytics' | 'upload_limit'>('analytics')
+
+  const GateOverlay = ({ reason = 'analytics' as const }) => (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[6px] rounded-2xl p-6 text-center animate-fadeIn">
+      <div className="w-12 h-12 rounded-full bg-[#141720] border border-border flex items-center justify-center mb-4">
+        <Lock className="w-5 h-5 text-brand-green" />
+      </div>
+      <h3 className="text-white font-display text-lg mb-2">Pro Feature</h3>
+      <p className="text-text-muted text-xs font-mono mb-6 max-w-[200px]">Unlock deep trends, heatmaps, and multi-account analytics.</p>
+      <button 
+        onClick={() => { setUpgradeReason(reason); setIsUpgradeModalOpen(true); }}
+        className="bg-brand-green text-[#0D0F14] px-6 py-2 rounded-lg font-bold text-sm hover:scale-105 transition-transform"
+      >
+        Upgrade Now
+      </button>
+    </div>
+  )
 
   return (
     <div className="max-w-[1600px] mx-auto flex flex-col gap-8 pb-12">
@@ -249,12 +271,15 @@ export default function AnalyticsPage() {
           { title: "Current Streak", value: "12 Days", sub: "No impulse purchases", icon: Sparkles, iconColor: "text-brand-green" },
         ].map((metric, i) => (
           <Card key={i} className="flex flex-col gap-1.5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            {!isPro && i > 0 && <GateOverlay />}
+            <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity ${!isPro && i > 0 ? 'blur-sm' : ''}`}>
               <metric.icon className={`w-12 h-12 ${metric.iconColor}`} />
             </div>
-            <span className="text-[10px] font-mono text-text-muted uppercase tracking-widest">{metric.title}</span>
-            <div className="text-3xl font-display text-white">{metric.value}</div>
-            <span className="text-xs font-mono text-text-muted">{metric.sub}</span>
+            <div className={!isPro && i > 0 ? 'blur-md select-none opacity-50' : ''}>
+              <span className="text-[10px] font-mono text-text-muted uppercase tracking-widest">{metric.title}</span>
+              <div className="text-3xl font-display text-white">{metric.value}</div>
+              <span className="text-xs font-mono text-text-muted">{metric.sub}</span>
+            </div>
           </Card>
         ))}
       </div>
@@ -263,29 +288,32 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* CHART 1: Cash Flow Over Time */}
-        <Card className="lg:col-span-12 h-[450px]">
-          <SectionTitle>Cash Flow Over Time</SectionTitle>
-          <div className="h-[340px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={MOCK_CASHFLOW} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--brand-green)" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="var(--brand-green)" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--brand-blue)" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="var(--brand-blue)" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#252A3A" />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#6B7394', fontSize: 12, fontFamily: 'DM Mono' }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7394', fontSize: 12, fontFamily: 'DM Mono' }} tickFormatter={(val) => `₹${val/1000}k`} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="Income" stroke="var(--brand-green)" strokeWidth={3} fillOpacity={1} fill="url(#colorIncome)" />
-                <Area type="monotone" dataKey="Expense" stroke="var(--brand-blue)" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
-              </AreaChart>
-            </ResponsiveContainer>
+        <Card className="lg:col-span-12 h-[450px] relative">
+          {!isPro && <GateOverlay />}
+          <div className={!isPro ? 'blur-md select-none' : ''}>
+            <SectionTitle>Cash Flow Over Time</SectionTitle>
+            <div className="h-[340px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={MOCK_CASHFLOW} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--brand-green)" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="var(--brand-green)" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--brand-blue)" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="var(--brand-blue)" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#252A3A" />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#6B7394', fontSize: 12, fontFamily: 'DM Mono' }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7394', fontSize: 12, fontFamily: 'DM Mono' }} tickFormatter={(val) => `₹${val/1000}k`} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Area type="monotone" dataKey="Income" stroke="var(--brand-green)" strokeWidth={3} fillOpacity={1} fill="url(#colorIncome)" />
+                  <Area type="monotone" dataKey="Expense" stroke="var(--brand-blue)" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </Card>
 
@@ -339,65 +367,71 @@ export default function AnalyticsPage() {
         </Card>
 
         {/* CHART 3: Top Merchants */}
-        <Card className="lg:col-span-6 h-[460px]">
-          <SectionTitle>Where you spend the most</SectionTitle>
-          <div className="h-[340px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                layout="vertical"
-                data={MOCK_MERCHANTS.sort((a,b) => b.value - a.value).slice(0, 8)}
-                margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#252A3A" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#fff', fontSize: 12, fontFamily: 'Syne' }}
-                />
-                <Tooltip 
-                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                  contentStyle={{ backgroundColor: '#141720', border: '1px solid #252A3A', borderRadius: '12px' }}
-                  itemStyle={{ color: '#fff', fontFamily: 'DM Mono' }}
-                />
-                <Bar 
-                  dataKey="value" 
-                  radius={[0, 4, 4, 0]}
-                  barSize={18}
+        <Card className="lg:col-span-6 h-[460px] relative">
+          {!isPro && <GateOverlay />}
+          <div className={!isPro ? 'blur-md select-none' : ''}>
+            <SectionTitle>Where you spend the most</SectionTitle>
+            <div className="h-[340px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  layout="vertical"
+                  data={MOCK_MERCHANTS.sort((a,b) => b.value - a.value).slice(0, 8)}
+                  margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
                 >
-                  {MOCK_MERCHANTS.map((_, i) => (
-                    <Cell key={i} fill={`url(#barGradient)`} />
-                  ))}
-                </Bar>
-                <defs>
-                  <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="var(--brand-green)" stopOpacity={0.6} />
-                    <stop offset="100%" stopColor="var(--brand-blue)" stopOpacity={0.6} />
-                  </linearGradient>
-                </defs>
-              </BarChart>
-            </ResponsiveContainer>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#252A3A" />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fill: '#fff', fontSize: 12, fontFamily: 'Syne' }}
+                  />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                    contentStyle={{ backgroundColor: '#141720', border: '1px solid #252A3A', borderRadius: '12px' }}
+                    itemStyle={{ color: '#fff', fontFamily: 'DM Mono' }}
+                  />
+                  <Bar 
+                    dataKey="value" 
+                    radius={[0, 4, 4, 0]}
+                    barSize={18}
+                  >
+                    {MOCK_MERCHANTS.map((_, i) => (
+                      <Cell key={i} fill={`url(#barGradient)`} />
+                    ))}
+                  </Bar>
+                  <defs>
+                    <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="var(--brand-green)" stopOpacity={0.6} />
+                      <stop offset="100%" stopColor="var(--brand-blue)" stopOpacity={0.6} />
+                    </linearGradient>
+                  </defs>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </Card>
 
         {/* CHART 4: Spending Activity (Heatmap) */}
-        <Card className="lg:col-span-12">
-          <SectionTitle>Spending Activity</SectionTitle>
-          <div className="flex flex-col md:flex-row items-center gap-8 py-4">
-            <div className="flex-1 w-full">
-              <Heatmap />
-            </div>
-            <div className="w-px h-24 bg-border hidden md:block" />
-            <div className="flex flex-col gap-4 min-w-[200px]">
-              <div className="flex flex-col">
-                <span className="text-3xl font-display text-white">48</span>
-                <span className="text-[10px] font-mono text-text-muted uppercase">Transactions this month</span>
+        <Card className="lg:col-span-12 relative">
+          {!isPro && <GateOverlay />}
+          <div className={!isPro ? 'blur-md select-none' : ''}>
+            <SectionTitle>Spending Activity</SectionTitle>
+            <div className="flex flex-col md:flex-row items-center gap-8 py-4">
+              <div className="flex-1 w-full">
+                <Heatmap />
               </div>
-              <div className="flex flex-col">
-                <span className="text-3xl font-display text-brand-green">₹1,850</span>
-                <span className="text-[10px] font-mono text-text-muted uppercase">Avg. weekend spend</span>
+              <div className="w-px h-24 bg-border hidden md:block" />
+              <div className="flex flex-col gap-4 min-w-[200px]">
+                <div className="flex flex-col">
+                  <span className="text-3xl font-display text-white">48</span>
+                  <span className="text-[10px] font-mono text-text-muted uppercase">Transactions this month</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-3xl font-display text-brand-green">₹1,850</span>
+                  <span className="text-[10px] font-mono text-text-muted uppercase">Avg. weekend spend</span>
+                </div>
               </div>
             </div>
           </div>
@@ -480,6 +514,12 @@ export default function AnalyticsPage() {
         </div>
 
       </div>
+
+      <UpgradeModal 
+        isOpen={isUpgradeModalOpen} 
+        onClose={() => setIsUpgradeModalOpen(false)} 
+        reason={upgradeReason}
+      />
     </div>
   )
 }

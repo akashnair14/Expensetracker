@@ -1,8 +1,14 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
-import { UploadCloud, X, FileSearch, Table2, Sparkles, CheckCircle, FileText, FileSpreadsheet, Camera } from 'lucide-react'
+import { 
+  Upload as UploadIcon, X, FileSearch, Table2, Sparkles, 
+  CheckCircle, FileText, FileSpreadsheet, Camera, Lock, AlertCircle 
+} from 'lucide-react'
+import { usePlanGate } from '@/hooks/useSubscription'
+import UpgradeModal from '@/components/subscription/UpgradeModal'
 import { createClient } from '@/lib/db/client'
 import { useRouter } from 'next/navigation'
 import { User } from '@supabase/supabase-js'
@@ -20,6 +26,8 @@ interface TransactionPreview extends ParsedTransaction {
 export default function UploadPage() {
   const [uploadState, setUploadState] = useState<UploadState>('idle')
   const [file, setFile] = useState<File | null>(null)
+  const { canUpload, uploadsRemaining, isPro } = usePlanGate()
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
   const [bank, setBank] = useState<string>('')
   const [accountId, setAccountId] = useState<string>('')
   const [accounts, setAccounts] = useState<{ id: string; bank_name: string; account_label?: string }[]>([])
@@ -27,11 +35,29 @@ export default function UploadPage() {
   
   // review state
   const [transactions, setTransactions] = useState<TransactionPreview[]>([])
+  const [uploadData, setUploadData] = useState<{ jobId: string, uncachedMerchants: string[] } | null>(null)
   
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const cameraInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
   const router = useRouter()
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const f = acceptedFiles[0]
+    if (f) {
+      setFile(f)
+      const nameUpper = f.name.toUpperCase()
+      if (nameUpper.includes('HDFC')) setBank('HDFC Bank')
+      else if (nameUpper.includes('SBI')) setBank('SBI')
+      else if (nameUpper.includes('ICICI')) setBank('ICICI Bank')
+      setUploadState('selected')
+    }
+  }, [])
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
+    onDrop, 
+    accept: { 'application/pdf': ['.pdf'], 'text/csv': ['.csv'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
+    multiple: false,
+    disabled: !canUpload
+  })
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -43,35 +69,6 @@ export default function UploadPage() {
       }
     })
   }, [supabase])
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (f) {
-      setFile(f)
-      const nameUpper = f.name.toUpperCase()
-      if (nameUpper.includes('HDFC')) setBank('HDFC Bank')
-      else if (nameUpper.includes('SBI')) setBank('SBI')
-      else if (nameUpper.includes('ICICI')) setBank('ICICI Bank')
-      setUploadState('selected')
-    }
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    const f = e.dataTransfer.files?.[0]
-    if (f) {
-      setFile(f)
-      const nameUpper = f.name.toUpperCase()
-      if (nameUpper.includes('HDFC')) setBank('HDFC Bank')
-      else if (nameUpper.includes('SBI')) setBank('SBI')
-      else if (nameUpper.includes('ICICI')) setBank('ICICI Bank')
-      setUploadState('selected')
-    }
-  }
 
   const startUpload = async () => {
     if (!file || !user) return
@@ -94,6 +91,7 @@ export default function UploadPage() {
       }
       
       const data = await res.json()
+      setUploadData(data)
       
       const { data: fileData } = await supabase.storage
         .from('statements')
@@ -123,6 +121,8 @@ export default function UploadPage() {
 
   return (
     <div className="max-w-3xl mx-auto w-full flex flex-col gap-8 animate-fadeIn pt-4 pb-20 lg:pb-8">
+      <UpgradeModal isOpen={isUpgradeModalOpen} onClose={() => setIsUpgradeModalOpen(false)} reason="upload_limit" />
+      
       <div>
         <h1 className="text-3xl font-display text-white mb-2">Upload Statement</h1>
         <p className="text-text-muted font-mono text-sm">Upload your bank statement to track expenses automatically.</p>
@@ -138,34 +138,63 @@ export default function UploadPage() {
             className="flex flex-col gap-6"
           >
             <div 
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              className="w-full min-h-[280px] border-2 border-dashed border-[#252A3A] rounded-xl flex flex-col items-center justify-center p-8 transition-all hover:border-brand-green/50 hover:bg-brand-green/5 hover:shadow-[0_0_30px_rgba(0,229,160,0.1)] group bg-surface"
+              {...getRootProps()} 
+              className={`w-full min-h-[280px] border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-8 transition-all relative overflow-hidden group bg-surface ${
+                isDragActive ? 'border-brand-green bg-brand-green/5' : 'border-[#252A3A] hover:border-brand-green/50 hover:bg-brand-green/5'
+              } ${!canUpload ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}
             >
+              {!canUpload && (
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center p-6 animate-fadeIn">
+                  <div className="w-16 h-16 rounded-full bg-[#141720] border border-border flex items-center justify-center mb-4">
+                    <Lock className="w-8 h-8 text-brand-green" />
+                  </div>
+                  <h3 className="text-white font-display text-xl mb-2">Upload Limit Reached</h3>
+                  <p className="text-text-muted text-sm font-mono mb-6 max-w-[250px] text-center">You&apos;ve used all your free uploads. Upgrade to Pro for unlimited.</p>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setIsUpgradeModalOpen(true); }}
+                    className="bg-brand-green text-[#0D0F14] px-8 py-3 rounded-lg font-bold hover:scale-105 transition-transform"
+                  >
+                    Upgrade Now
+                  </button>
+                </div>
+              )}
+              <input {...getInputProps()} />
               <div className="w-16 h-16 bg-surface2 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <UploadCloud className="w-8 h-8 text-brand-green animate-[float_2s_ease-in-out_infinite]" />
+                <UploadIcon className="w-8 h-8 text-brand-green animate-[float_2s_ease-in-out_infinite]" />
               </div>
               <h2 className="text-2xl font-display text-white mb-2 text-center">Drop your bank statement here</h2>
               <p className="text-text-muted font-mono text-xs mb-8 text-center">PDF, CSV, or Excel • HDFC, SBI, ICICI, Axis supported</p>
               
               <div className="flex items-center gap-4 w-full max-w-sm">
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex-1 bg-brand-green text-[#0D0F14] font-bold font-ui py-3 rounded-md hover:bg-brand-green/90 transition-colors"
-                >
+                <div className="flex-1 bg-brand-green text-[#0D0F14] font-bold font-ui py-3 rounded-md text-center">
                   Browse Files
-                </button>
-                <button 
-                  onClick={() => cameraInputRef.current?.click()}
-                  className="flex-1 bg-surface2 border border-border text-white font-ui py-3 rounded-md hover:border-brand-green/50 transition-colors flex items-center justify-center gap-2 md:hidden"
-                >
-                  <Camera className="w-4 h-4" /> Photo
-                </button>
+                </div>
               </div>
-              
-              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".csv,.xlsx,.xls,.pdf" />
-              <input type="file" ref={cameraInputRef} onChange={handleFileChange} className="hidden" accept="image/*" capture="environment" />
             </div>
+
+            {!isPro && (
+              <div className="bg-surface border border-border rounded-xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-brand-green" />
+                    <span className="text-xs font-mono text-white">Free Plan Usage</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-text-muted">{5 - (typeof uploadsRemaining === 'number' ? uploadsRemaining : 0)} / 5 uploaded</span>
+                </div>
+                <div className="h-1.5 w-full bg-surface2 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-brand-green transition-all duration-1000" 
+                    style={{ width: `${((5 - (typeof uploadsRemaining === 'number' ? uploadsRemaining : 0)) / 5) * 100}%` }}
+                  />
+                </div>
+                {uploadsRemaining === 1 && (
+                  <p className="text-[10px] text-brand-orange font-mono mt-2 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    Last free upload remaining!
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="flex justify-center gap-4 flex-wrap">
               {['HDFC', 'SBI', 'ICICI', 'Axis', 'Kotak', 'Yes Bank'].map(b => (
@@ -243,7 +272,7 @@ export default function UploadPage() {
           </motion.div>
         )}
 
-        {(uploadState === 'parsing' || uploadState === 'review') && (
+        {(uploadState === 'parsing' || uploadState === 'review' || uploadState === 'importing') && (
           <motion.div
             key="stage3"
             initial={{ opacity: 0, y: 10 }}
@@ -270,7 +299,7 @@ export default function UploadPage() {
                 ))}
               </div>
 
-              {uploadState === 'review' && transactions.length > 0 && (
+              {(uploadState === 'review' || uploadState === 'importing') && transactions.length > 0 && (
                 <div className="animate-fadeIn mt-4">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-ui text-white font-medium">Preview Transactions</h3>
@@ -325,12 +354,29 @@ export default function UploadPage() {
                       Cancel
                     </button>
                     <button 
-                      onClick={() => {
-                        router.push('/dashboard')
+                      onClick={async () => {
+                        setUploadState('importing')
+                        try {
+                          const res = await fetch('/api/ai/categorize', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                              jobId: uploadData?.jobId, 
+                              uncachedMerchants: uploadData?.uncachedMerchants 
+                            })
+                          })
+                          if (!res.ok) throw new Error('Import failed')
+                          setUploadState('done')
+                          router.push('/dashboard')
+                        } catch (err) {
+                          alert('Failed to import transactions')
+                          setUploadState('review')
+                        }
                       }}
-                      className="flex-[2] bg-brand-green text-[#0D0F14] font-bold font-ui py-3 rounded-md hover:bg-brand-green/90 transition-colors shadow-lg shadow-brand-green/20"
+                      disabled={uploadState === 'importing'}
+                      className="flex-[2] bg-brand-green text-[#0D0F14] font-bold font-ui py-3 rounded-md hover:bg-brand-green/90 transition-colors shadow-lg shadow-brand-green/20 disabled:opacity-50"
                     >
-                      Import All ({transactions.length})
+                      {uploadState === 'importing' ? 'Importing...' : `Import All (${transactions.length})`}
                     </button>
                   </div>
                 </div>

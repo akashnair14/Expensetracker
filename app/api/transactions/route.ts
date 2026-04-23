@@ -46,12 +46,6 @@ export async function GET(request: Request) {
       query = query.or(`description.ilike.%${search}%,merchant.ilike.%${search}%`)
     }
 
-    query = query.order('date', { ascending: false }).range(offset, offset + limit - 1)
-
-    const { data: transactions, count, error } = await query
-
-    if (error) throw error
-
     // Aggregate stats query
     let statsQuery = supabase.from('transactions').select('amount, is_debit, category')
     statsQuery = statsQuery.eq('user_id', user.id)
@@ -64,7 +58,17 @@ export async function GET(request: Request) {
     else if (type === 'credits') statsQuery = statsQuery.eq('is_debit', false)
     if (search) statsQuery = statsQuery.or(`description.ilike.%${search}%,merchant.ilike.%${search}%`)
 
-    const { data: statsData, error: statsError } = await statsQuery
+    query = query.order('date', { ascending: false }).range(offset, offset + limit - 1)
+
+    const [transactionsResult, statsResult] = await Promise.all([
+      query,
+      statsQuery
+    ])
+    
+    const { data: transactions, count, error: transactionsError } = transactionsResult
+    const { data: statsData, error: statsError } = statsResult
+
+    if (transactionsError) throw transactionsError
 
     let totalDebit = 0
     let totalCredit = 0
@@ -72,12 +76,13 @@ export async function GET(request: Request) {
 
     if (!statsError && statsData) {
       statsData.forEach(tx => {
+        const amountNum = Number(tx.amount)
         if (tx.is_debit) {
-          totalDebit += Number(tx.amount)
+          totalDebit += amountNum
           const cat = tx.category || 'Uncategorized'
-          categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + Number(tx.amount)
+          categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + amountNum
         } else {
-          totalCredit += Number(tx.amount)
+          totalCredit += amountNum
         }
       })
     }

@@ -76,10 +76,15 @@ Return ONLY JSON:
   }
 
   // Step 3: Generate natural language answer
+  const totalDebit = transactions?.filter(t => t.is_debit).reduce((s, t) => s + t.amount, 0) || 0
+  const totalCredit = transactions?.filter(t => !t.is_debit).reduce((s, t) => s + t.amount, 0) || 0
+
   const stats = {
     count: transactions?.length || 0,
-    total: transactions?.reduce((s, t) => s + t.amount, 0) || 0,
-    average: transactions?.length ? (transactions.reduce((s,t) => s+t.amount, 0) / transactions.length) : 0
+    totalDebit,
+    totalCredit,
+    total: intent.filters?.transactionType === 'credit' ? totalCredit : totalDebit,
+    average: transactions?.length ? ((intent.filters?.transactionType === 'credit' ? totalCredit : totalDebit) / transactions.length) : 0
   }
   
   const answerPrompt = `User asked: "${userQuestion}"

@@ -6,8 +6,10 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/db/client'
 import { 
   LayoutDashboard, ArrowLeftRight, BarChart3, Target, 
-  Upload, FileText, RefreshCw, Star, Settings, Menu, X, LogOut, ChevronDown 
+  Upload, FileText, RefreshCw, Star, Settings, Menu, X, LogOut, ChevronDown, Zap 
 } from 'lucide-react'
+import { useSubscription } from '@/hooks/useSubscription'
+import PlanBadge from '@/components/subscription/PlanBadge'
 
 const navLinks = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -18,7 +20,7 @@ const navLinks = [
   { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Subscriptions', href: '/subscriptions', icon: RefreshCw },
   { name: 'Goals', href: '/goals', icon: Star },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Pricing', href: '/pricing', icon: Zap, color: 'text-brand-green' },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -27,6 +29,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const supabase = createClient()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [user, setUser] = useState<import('@supabase/supabase-js').User | null>(null)
+  
+  const { data: subscription } = useSubscription()
   
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -66,33 +70,60 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {navLinks.map(link => {
             const Icon = link.icon
             const isActive = pathname === link.href
-            return (
-              <Link
-                key={link.name}
-                href={link.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                  isActive 
-                    ? 'bg-brand-green/10 text-brand-green border-l-2 border-brand-green rounded-l-none' 
-                    : 'text-text-muted hover:bg-[#1C2030] hover:text-white'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {link.name}
-              </Link>
-            )
+              return (
+                <Link
+                  key={link.name}
+                  href={link.href}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isActive 
+                      ? 'bg-brand-green/10 text-brand-green border-l-2 border-brand-green rounded-l-none' 
+                      : `${(link as any).color || 'text-text-muted'} hover:bg-[#1C2030] hover:text-white`
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {link.name}
+                </Link>
+              )
           })}
         </nav>
 
+        {/* Settings pinned above logout */}
+        <div className="px-3 py-2 border-t border-border/50">
+          <Link
+            href="/settings"
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+              pathname === '/settings'
+                ? 'bg-brand-green/10 text-brand-green border-l-2 border-brand-green rounded-l-none'
+                : 'text-text-muted hover:bg-[#1C2030] hover:text-white'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            Settings
+          </Link>
+        </div>
+
         <div className="p-4 border-t border-border flex items-center justify-between">
-          <div className="flex items-center gap-3 truncate">
-            <div className="w-8 h-8 rounded-full bg-brand-green/20 text-brand-green flex items-center justify-center font-ui font-bold">
-              {user?.user_metadata?.full_name?.[0] || 'U'}
+            <div className="w-8 h-8 rounded-full bg-brand-green/20 text-brand-green flex items-center justify-center font-ui font-bold shrink-0">
+              {user?.user_metadata?.full_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
             </div>
-            <div className="truncate">
-              <p className="text-sm font-medium truncate">{user?.user_metadata?.full_name || 'User'}</p>
-              <p className="text-xs text-text-muted truncate">{user?.email}</p>
+            <div className="truncate flex flex-col">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium truncate">{user?.user_metadata?.full_name || 'User'}</p>
+                <PlanBadge plan={subscription?.plan} />
+              </div>
+              <p className="text-[10px] text-text-muted truncate">{user?.email}</p>
+              {subscription?.plan === 'free' && (
+                <div className="mt-1">
+                  <div className="h-1 w-full bg-surface2 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-brand-green transition-all duration-1000" 
+                      style={{ width: `${(subscription.uploadsUsed / 5) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-[9px] text-text-muted mt-0.5">{subscription.uploadsUsed}/5 free uploads used</p>
+                </div>
+              )}
             </div>
-          </div>
           <button onClick={handleLogout} className="text-text-muted hover:text-red-400 p-2">
             <LogOut className="w-4 h-4" />
           </button>

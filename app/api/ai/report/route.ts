@@ -12,6 +12,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Subscription Gate
+    const { assertPlan } = await import('@/lib/subscription/gate')
+    await assertPlan(user.id, 'pro')
+
     const { month } = await request.json() // "2026-04"
 
     if (!month) {

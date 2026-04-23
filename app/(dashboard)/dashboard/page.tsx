@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Calendar, ArrowUpRight, ArrowDownRight, Sparkles, ArrowRight } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Legend, CartesianGrid } from 'recharts'
+import { format } from 'date-fns'
 import { createClient } from '@/lib/db/client'
 import { Skeleton } from '@/components/ui/skeleton'
 import Link from 'next/link'
@@ -41,6 +42,8 @@ export default function DashboardPage() {
   const supabase = createClient()
   const [user, setUser] = useState<import('@supabase/supabase-js').User | null>(null)
   const now = new Date()
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+  const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
   const currentMonthStr = `${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()}`
 
   useEffect(() => {
@@ -48,18 +51,18 @@ export default function DashboardPage() {
   }, [supabase.auth])
 
   // Fetch from APIs as specified
-  const { isLoading: txLoading } = useQuery({
-    queryKey: ['transactions', user?.id],
+  const { data: txData, isLoading: txLoading } = useQuery({
+    queryKey: ['transactions', user?.id, currentMonthStart],
     queryFn: async () => {
-      if (!user?.id) return []
-      const res = await fetch('/api/transactions')
-      if (!res.ok) return []
+      if (!user?.id) return null
+      const res = await fetch(`/api/transactions?start_date=${currentMonthStart}&end_date=${currentMonthEnd}`)
+      if (!res.ok) return null
       return res.json()
     },
     enabled: !!user?.id
   })
 
-  const { isLoading: bdLoading } = useQuery({
+  const { data: budgets, isLoading: bdLoading } = useQuery({
     queryKey: ['budgets', user?.id],
     queryFn: async () => {
       if (!user?.id) return []
@@ -72,43 +75,42 @@ export default function DashboardPage() {
 
   const isLoading = txLoading || bdLoading
 
-  // Mock aggregates if API fails/empty (showing data for rich UI preview)
-  const totalSpent = 45200
-  const totalIncome = 120500
+  // Aggregate stats from API
+  const totalSpent = txData?.totalDebit || 0
+  const totalIncome = txData?.totalCredit || 0
   const netSavings = totalIncome - totalSpent
-  const savingsRate = Math.round((netSavings / totalIncome) * 100) || 0
-  const budgetRemaining = 75
+  const savingsRate = totalIncome > 0 ? Math.round((netSavings / totalIncome) * 100) : 0
+  
+  // Budget logic
+  const currentMonthBudgets = budgets?.filter((b: any) => b.month === now.toISOString().slice(0, 7)) || []
+  const totalBudgetLimit = currentMonthBudgets.reduce((acc: number, b: any) => acc + Number(b.amount), 0) || 60000
+  const budgetRemainingPercent = totalBudgetLimit > 0 ? Math.max(0, Math.round(((totalBudgetLimit - totalSpent) / totalBudgetLimit) * 100)) : 0
 
-  const pieData = [
-    { name: 'Housing', value: 20000 },
-    { name: 'Food', value: 12000 },
-    { name: 'Transport', value: 5000 },
-    { name: 'Entertainment', value: 8200 },
-  ]
+  const pieData = txData?.categoryBreakdown 
+    ? Object.entries(txData.categoryBreakdown).map(([name, value]) => ({ name, value: Number(value) }))
+    : []
 
-  const barData = [
-    { month: 'Nov', Income: 110000, Expense: 85000 },
-    { month: 'Dec', Income: 115000, Expense: 95000 },
-    { month: 'Jan', Income: 120000, Expense: 55000 },
-    { month: 'Feb', Income: 118000, Expense: 60000 },
-    { month: 'Mar', Income: 122000, Expense: 42000 },
-    { month: 'Apr', Income: 120500, Expense: 45200 },
-  ]
+  const recentTransactions = txData?.transactions?.slice(0, 5).map((tx: any) => ({
+    id: tx.id,
+    date: format(new Date(tx.date), 'MMM dd'),
+    merchant: tx.merchant || tx.description.split(' ')[0],
+    category: tx.category,
+    amount: Number(tx.amount),
+    isDebit: tx.is_debit
+  })) || []
 
-  const recentTransactions = [
-    { id: 1, date: 'Apr 22', merchant: 'Amazon', category: 'Shopping', amount: 1200, isDebit: true },
-    { id: 2, date: 'Apr 21', merchant: 'Uber', category: 'Transport', amount: 450, isDebit: true },
-    { id: 3, date: 'Apr 20', merchant: 'Starbucks', category: 'Food', amount: 350, isDebit: true },
-    { id: 4, date: 'Apr 18', merchant: 'Salary', category: 'Income', amount: 120500, isDebit: false },
-    { id: 5, date: 'Apr 17', merchant: 'Netflix', category: 'Entertainment', amount: 649, isDebit: true },
-  ]
+  // Add empty bar data placeholder if not enough data
+  const barData = txData?.transactions ? [
+    { month: currentMonthStr.split(' ')[0], Income: totalIncome, Expense: totalSpent }
+  ] : []
+
 
   return (
     <div className="w-full flex flex-col gap-8 animate-fadeIn">
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes drawCircle {
           from { stroke-dasharray: 0, 100; }
-          to { stroke-dasharray: ${budgetRemaining}, 100; }
+          to { stroke-dasharray: ${budgetRemainingPercent}, 100; }
         }
       `}} />
 
@@ -159,7 +161,7 @@ export default function DashboardPage() {
             <h3 className="text-text-muted font-mono text-sm">Budget Remaining</h3>
             {isLoading ? <Skeleton className="h-8 w-20" /> : (
               <div className="text-3xl font-display text-white">
-                <CountUp value={budgetRemaining} suffix="%" />
+                <CountUp value={budgetRemainingPercent} suffix="%" />
               </div>
             )}
             <span className="text-xs text-text-muted font-mono mt-auto pt-2">of ₹60,000 limit</span>
@@ -168,7 +170,7 @@ export default function DashboardPage() {
           <div className="relative w-16 h-16 mr-2 z-10">
             <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
               <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" className="text-border" />
-              <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray={`${budgetRemaining}, 100`} className="text-brand-green animate-[drawCircle_1.5s_ease-out]" />
+              <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray={`${budgetRemainingPercent}, 100`} className="text-brand-green animate-[drawCircle_1.5s_ease-out]" />
             </svg>
           </div>
         </div>
@@ -303,7 +305,7 @@ export default function DashboardPage() {
                         </div>
                       </td>
                     </tr>
-                  ) : recentTransactions.map((tx) => (
+                  ) : recentTransactions.map((tx: any) => (
                     <tr key={tx.id} className="border-b border-border/50 hover:bg-surface2/50 transition-colors">
                       <td className="py-4 text-sm text-text-muted font-mono">{tx.date}</td>
                       <td className="py-4 text-sm text-white font-ui">{tx.merchant}</td>

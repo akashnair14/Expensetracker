@@ -5,8 +5,10 @@ import { motion } from 'framer-motion'
 import { 
   FileText, Sparkles, Download, Share2, RefreshCw, 
   ChevronRight, Calendar, TrendingUp, Wallet, ArrowRight,
-  Loader2, CheckCircle2
+  Loader2, CheckCircle2, Lock
 } from 'lucide-react'
+import { usePlanGate } from '@/hooks/useSubscription'
+import UpgradeModal from '@/components/subscription/UpgradeModal'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import { format } from 'date-fns'
@@ -30,6 +32,8 @@ export default function ReportsPage() {
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [genStep, setGenStep] = useState(0)
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
+  const { isPro, isLoading } = usePlanGate()
 
   const currentMonth = format(new Date(), 'yyyy-MM')
 
@@ -271,6 +275,26 @@ export default function ReportsPage() {
                {renderContent(selectedReport.content)}
             </div>
           </motion.div>
+        ) : !isPro ? (
+          <div className="bg-[#141720] border border-brand-green/20 rounded-3xl p-12 lg:p-20 flex flex-col items-center justify-center min-h-[500px] text-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-b from-brand-green/5 to-transparent opacity-50" />
+            <div className="relative z-10 flex flex-col items-center">
+              <div className="w-20 h-20 rounded-full bg-brand-green/10 flex items-center justify-center border border-brand-green/20 mb-8">
+                <Lock className="w-10 h-10 text-brand-green" />
+              </div>
+              <h2 className="text-3xl font-display text-white mb-4">AI Reports is a Pro Feature</h2>
+              <p className="text-text-muted font-mono text-sm max-w-md mb-10 leading-relaxed">
+                Get a comprehensive monthly analysis of your spending habits, recurring costs, and actionable advice to save more with SpendSense Pro.
+              </p>
+              <button 
+                onClick={() => setIsUpgradeModalOpen(true)}
+                className="bg-brand-green text-[#0D0F14] px-10 py-4 rounded-xl font-display font-bold text-lg hover:scale-105 transition-transform shadow-xl shadow-brand-green/20"
+              >
+                Unlock AI Reports
+              </button>
+              <p className="mt-6 text-[11px] font-mono text-text-muted uppercase tracking-widest">Starting at just ₹66/month</p>
+            </div>
+          </div>
         ) : (
           <div className="bg-[#141720] border border-[#252A3A] border-dashed rounded-3xl p-32 flex flex-col items-center justify-center text-center">
             <FileText className="w-20 h-20 text-text-muted mb-6 opacity-20" />
@@ -282,11 +306,17 @@ export default function ReportsPage() {
               onClick={handleGenerate}
               className="bg-brand-blue text-white px-8 py-3 rounded-xl font-ui font-bold hover:bg-brand-blue/90 transition-all"
             >
-              Generate April 2026 Report
+              Generate {format(new Date(), 'MMMM')} Report
             </button>
           </div>
         )}
       </div>
+
+      <UpgradeModal 
+        isOpen={isUpgradeModalOpen} 
+        onClose={() => setIsUpgradeModalOpen(false)} 
+        reason="ai_reports"
+      />
     </div>
   )
 }

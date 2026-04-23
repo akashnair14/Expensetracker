@@ -1,10 +1,44 @@
 import { flashModel } from './gemini'
+import { createClient } from '@/lib/db/server'
 
 export async function categorizeMerchants(
-  merchants: string[]
-): Promise<Record<string, string>> {
-  if (merchants.length === 0) return {}
+  merchants: string[],
+  userId?: string
+): Promise<{ categories: Record<string, string>, aiGeneratedMerchants: string[] }> {
+  if (merchants.length === 0) return { categories: {}, aiGeneratedMerchants: [] }
   
+  const results: Record<string, string> = {}
+  const aiGeneratedMerchants: string[] = []
+  let merchantsToAi = [...merchants]
+
+  // Check custom categories if userId is provided
+  if (userId) {
+    const supabase = createClient()
+    const { data: customRules } = await supabase
+      .from('custom_categories')
+      .select('merchant_pattern, category')
+      .eq('user_id', userId)
+
+    if (customRules && customRules.length > 0) {
+      const remaining: string[] = []
+      
+      merchantsToAi.forEach(merchant => {
+        const rule = customRules.find(r => 
+          merchant.toLowerCase().includes(r.merchant_pattern.toLowerCase())
+        )
+        if (rule) {
+          results[merchant] = rule.category
+        } else {
+          remaining.push(merchant)
+        }
+      })
+      
+      merchantsToAi = remaining
+    }
+  }
+
+  if (merchantsToAi.length === 0) return { categories: results, aiGeneratedMerchants: [] }
+
   const prompt = `You are a financial transaction categorizer for Indian bank statements.
 Categorize each merchant/description into EXACTLY one of these categories:
 Food & Dining, Groceries, Transport, Entertainment, Bills & Utilities, Housing, Debt Repayment, 
@@ -22,7 +56,7 @@ Rules:
 - UPI transfers to individuals → Transfer
 - Default fallback if unsure → Other
 
-Merchants to categorize: ${JSON.stringify(merchants)}
+Merchants to categorize: ${JSON.stringify(merchantsToAi)}
 
 Respond with ONLY valid JSON, no markdown, no explanation:
 {"merchant_name": "Category", ...}`
@@ -31,16 +65,20 @@ Respond with ONLY valid JSON, no markdown, no explanation:
     const result = await flashModel.generateContent(prompt)
     const text = result.response.text().trim()
     
+    let aiResults: Record<string, string> = {}
     try {
-      return JSON.parse(text)
+      aiResults = JSON.parse(text)
     } catch {
-      // Attempt to extract JSON if wrapped in markdown
       const match = text.match(/\{[\s\S]*\}/)
-      if (match) return JSON.parse(match[0])
-      throw new Error("Failed to parse AI categorization response")
+      if (match) aiResults = JSON.parse(match[0])
+    }
+    
+    return { 
+      categories: { ...results, ...aiResults }, 
+      aiGeneratedMerchants: Object.keys(aiResults) 
     }
   } catch (error) {
     console.error("Gemini API Error:", error)
-    return {}
+    return { categories: results, aiGeneratedMerchants: [] }
   }
 }

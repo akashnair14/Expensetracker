@@ -36,47 +36,47 @@ export async function POST(request: Request) {
     const transactions = JSON.parse(text)
 
     // Call Gemini to categorize uncached merchants
-    let aiCategories: Record<string, string> = {}
+    let allCategories: Record<string, string> = {}
+
     if (uncachedMerchants && uncachedMerchants.length > 0) {
-      aiCategories = await categorizeMerchants(uncachedMerchants)
+      const result = await categorizeMerchants(uncachedMerchants, user.id)
+      allCategories = result.categories
       
-      // Save new mappings to merchant_categories table
-      const mappingsToInsert = Object.entries(aiCategories).map(([merchant, category]) => ({
-        merchant_hash: merchant.substring(0, 50), // Hash / shortened
-        category
+      // Only cache mappings that were AI-generated (not from user's custom rules)
+      const aiGeneratedMappings = result.aiGeneratedMerchants.map(merchant => ({
+        merchant_hash: merchant.substring(0, 50),
+        category: result.categories[merchant]
       }))
       
-      if (mappingsToInsert.length > 0) {
-        // Upsert into merchant_categories
-        await supabase.from('merchant_categories').upsert(mappingsToInsert, { onConflict: 'merchant_hash' })
+      if (aiGeneratedMappings.length > 0) {
+        // Upsert into global merchant_categories cache
+        await supabase.from('merchant_categories').upsert(aiGeneratedMappings, { onConflict: 'merchant_hash' })
         
         // Cache in redis if available
         if (redis) {
-          for (const [merchant, category] of Object.entries(aiCategories)) {
-            await redis.set(`merchant:${merchant.substring(0, 50)}`, category)
+          for (const mapping of aiGeneratedMappings) {
+            await redis.set(`merchant:${mapping.merchant_hash}`, mapping.category)
           }
         }
       }
     }
 
     // Apply categories
-    const transactionsToInsert = transactions.map((tx: Record<string, unknown>) => {
-      let finalCategory = tx.category || 'Uncategorized'
+    const transactionsToInsert = transactions.map((tx: Record<string, any>) => {
+      let finalCategory = 'Other'
       
-      if (typeof tx.merchant === 'string' && !tx.category) {
-        const merchantStr = tx.merchant
-        const hash = merchantStr.substring(0, 50)
-        if (aiCategories[hash]) {
-          finalCategory = aiCategories[hash]
-        } else if (aiCategories[merchantStr]) {
-          finalCategory = aiCategories[merchantStr]
-        }
+      const merchantStr = tx.merchant || 'UNKNOWN'
+      const hash = merchantStr.substring(0, 50)
+      
+      if (allCategories[merchantStr]) {
+        finalCategory = allCategories[merchantStr]
+      } else if (allCategories[hash]) {
+        finalCategory = allCategories[hash]
       }
       
       return {
         ...tx,
         category: finalCategory,
-        // Ensure user_id isn't directly passed if schema is strict, but account_id is there
       }
     })
 
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ 
       success: true, 
       imported: transactionsToInsert.length,
-      categories: aiCategories
+      categories: allCategories
     })
 
   } catch (error: unknown) {

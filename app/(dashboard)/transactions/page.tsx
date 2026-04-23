@@ -3,10 +3,8 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Download, MoreHorizontal, X, AlertCircle, CheckSquare, Square, ChevronDown, FileSearch, RefreshCw } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
-
-const queryClient = new QueryClient()
 
 const CATEGORIES = [
   'Food & Dining', 'Shopping', 'Transport', 'Entertainment', 'Bills & Utilities', 
@@ -572,9 +570,5 @@ function TransactionsContent() {
 }
 
 export default function TransactionsPage() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TransactionsContent />
-    </QueryClientProvider>
-  )
+  return <TransactionsContent />
 }

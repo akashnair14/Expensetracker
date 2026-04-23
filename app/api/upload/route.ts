@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/db/server'
 import { parseStatement } from '@/lib/parsers'
+import { assertCanUpload, SubscriptionLimitError } from '@/lib/subscription/gate'
 
 export async function POST(request: Request) {
   try {
@@ -11,12 +12,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Subscription gate — check upload limit
+    try {
+      await assertCanUpload(user.id, supabase)
+    } catch (err) {
+      if (err instanceof SubscriptionLimitError) {
+        return NextResponse.json(
+          { error: err.message, code: err.code, subscription: err.subscription },
+          { status: 403 }
+        )
+      }
+      throw err
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
     const bankName = formData.get('bank_name') as string
+    const accountId = formData.get('account_id') as string
 
     if (!file) {
       return NextResponse.json({ error: 'File is required' }, { status: 400 })
+    }
+
+    if (!accountId) {
+      return NextResponse.json({ error: 'Account ID is required' }, { status: 400 })
     }
 
     const timestamp = Date.now()
@@ -32,10 +51,10 @@ export async function POST(request: Request) {
       console.error('Storage upload error:', uploadError)
     }
 
-    const transactions = await parseStatement(file, bankName)
+    const rawTransactions = await parseStatement(file, bankName)
     
     const merchantsSet = new Set<string>()
-    transactions.forEach(t => {
+    const transactions = rawTransactions.map(t => {
       const cleaned = t.description
         .replace(/[\d\W_]+/g, ' ')
         .trim()
@@ -43,7 +62,17 @@ export async function POST(request: Request) {
         .slice(0, 3)
         .join(' ')
         .toUpperCase()
-      if (cleaned.length > 2) merchantsSet.add(cleaned)
+      
+      const merchant = cleaned.length > 2 ? cleaned : 'UNKNOWN'
+      if (merchant !== 'UNKNOWN') merchantsSet.add(merchant)
+
+      return {
+        id: crypto.randomUUID(),
+        ...t,
+        merchant,
+        user_id: user.id,
+        account_id: accountId
+      }
     })
     
     const uniqueMerchants = Array.from(merchantsSet)
@@ -65,6 +94,12 @@ export async function POST(request: Request) {
       .upload(tempPath, JSON.stringify(transactions), {
         contentType: 'application/json'
       })
+
+    await supabase.from('upload_usage').insert({
+      user_id: user.id,
+      file_name: file.name,
+      transaction_count: transactions.length
+    })
 
     return NextResponse.json({ 
       jobId, 
