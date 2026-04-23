@@ -28,9 +28,10 @@ export async function GET() {
       notifications: prefs || null,
       email: user.email
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Settings profile GET error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
@@ -43,7 +44,7 @@ export async function PATCH(request: Request) {
     const body = await request.json()
     const { full_name, currency, locale, monthly_income_estimate, financial_goal_type } = body
 
-    const updates: any = {
+    const updates: Record<string, string | number | null> = {
       updated_at: new Date().toISOString()
     }
     if (full_name !== undefined) updates.full_name = full_name
@@ -61,8 +62,9 @@ export async function PATCH(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Settings profile PATCH error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Target, Save, Info } from 'lucide-react'
+import { X, Save, Info } from 'lucide-react'
 import { useCreateGoal, useUpdateGoal } from '@/hooks/useGoals'
 import { Goal } from '@/types/goals'
 
@@ -188,7 +188,7 @@ export default function CreateGoalModal({ isOpen, onClose, existingGoal }: Creat
                           className={`w-7 h-7 rounded-full transition-all ring-offset-[#141720] ${
                             formData.color === c ? 'ring-2 ring-offset-2 scale-110' : 'hover:scale-110'
                           }`}
-                          style={{ backgroundColor: c, '--tw-ring-color': c } as any}
+                          style={{ backgroundColor: c, '--tw-ring-color': c } as React.CSSProperties}
                         />
                       ))}
                     </div>
@@ -241,7 +241,7 @@ export default function CreateGoalModal({ isOpen, onClose, existingGoal }: Creat
                           <button
                             key={p.val}
                             type="button"
-                            onClick={() => setFormData(prev => ({ ...prev, priority: p.val as any }))}
+                            onClick={() => setFormData(prev => ({ ...prev, priority: p.val as 1 | 2 | 3 }))}
                             className={`flex-1 flex flex-col items-center py-1 rounded-lg transition-all ${
                               formData.priority === p.val ? 'bg-[#141720] shadow-lg border border-border/50' : 'opacity-40 hover:opacity-100'
                             }`}

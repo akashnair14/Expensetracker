@@ -2,7 +2,7 @@
 
 import * as Dialog from '@radix-ui/react-dialog'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Lock, X, Star, Zap, CheckCircle2 } from 'lucide-react'
+import { Lock, X, Star, Zap } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
@@ -36,8 +36,8 @@ export default function UpgradeModal({ isOpen, onClose, reason = 'upload_limit' 
   const content = REASONS[reason]
   const [isProcessing, setIsProcessing] = useState<string | null>(null)
 
-  const handleUpgrade = (plan: 'monthly' | 'annual') => {
-    setIsProcessing(plan)
+  const handleUpgrade = (_plan: 'monthly' | 'annual') => {
+    setIsProcessing(_plan)
     router.push('/pricing')
     onClose()
   }

@@ -8,7 +8,6 @@ export async function categorizeMerchants(
   if (merchants.length === 0) return { categories: {}, aiGeneratedMerchants: [] }
   
   const results: Record<string, string> = {}
-  const aiGeneratedMerchants: string[] = []
   let merchantsToAi = [...merchants]
 
   // Check custom categories if userId is provided
