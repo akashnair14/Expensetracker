@@ -1,11 +1,11 @@
 -- Create tables
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID REFERENCES auth.users NOT NULL PRIMARY KEY,
   email TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE TABLE accounts (
+CREATE TABLE IF NOT EXISTS accounts (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES users(id) NOT NULL,
   bank_name TEXT NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE accounts (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE TABLE transactions (
+CREATE TABLE IF NOT EXISTS transactions (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   account_id UUID REFERENCES accounts(id) NOT NULL,
   user_id UUID REFERENCES users(id) NOT NULL,
@@ -29,12 +29,12 @@ CREATE TABLE transactions (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE TABLE merchant_categories (
+CREATE TABLE IF NOT EXISTS merchant_categories (
   merchant_hash TEXT PRIMARY KEY,
   category TEXT NOT NULL
 );
 
-CREATE TABLE budgets (
+CREATE TABLE IF NOT EXISTS budgets (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES users(id) NOT NULL,
   category TEXT NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE budgets (
   month TEXT NOT NULL -- Format: YYYY-MM
 );
 
-CREATE TABLE reports (
+CREATE TABLE IF NOT EXISTS reports (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES users(id) NOT NULL,
   month TEXT NOT NULL,

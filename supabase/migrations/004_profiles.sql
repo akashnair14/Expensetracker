@@ -1,5 +1,12 @@
+-- Ensure core users table exists (mirroring 001 for safety)
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID REFERENCES auth.users NOT NULL PRIMARY KEY,
+  email TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- User profile table (extends Supabase auth.users)
-CREATE TABLE IF NOT EXISTS profiles (
+CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
   full_name TEXT,
   avatar_url TEXT,
@@ -11,8 +18,25 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Subscriptions Table (moved here to ensure it exists for the trigger)
+CREATE TABLE IF NOT EXISTS public.subscriptions (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  plan TEXT DEFAULT 'free',
+  status TEXT DEFAULT 'active',
+  current_period_end TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Upload Usage Tracker
+CREATE TABLE IF NOT EXISTS public.upload_usage (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  count INTEGER DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Notification preferences
-CREATE TABLE IF NOT EXISTS notification_preferences (
+CREATE TABLE IF NOT EXISTS public.notification_preferences (
   user_id UUID PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
   budget_alert_70 BOOLEAN DEFAULT true,
   budget_alert_100 BOOLEAN DEFAULT true,
