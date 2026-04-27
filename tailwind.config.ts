@@ -21,6 +21,7 @@ const config: Config = {
         display: ['Instrument Serif', 'serif'],
         mono: ['DM Mono', 'monospace'],
         ui: ['Syne', 'sans-serif'],
+        lora: ['Lora', 'serif'],
       },
       keyframes: {
         fadeIn: {

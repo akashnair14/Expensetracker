@@ -73,7 +73,9 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname
   
+  const publicRoutes = ['/terms', '/privacy', '/login', '/signup']
   const isAuthPage = path.startsWith('/login') || path.startsWith('/signup')
+  const isPublicRoute = publicRoutes.some(p => path.startsWith(p))
   
   // Protect all internal routes
   const protectedPaths = [

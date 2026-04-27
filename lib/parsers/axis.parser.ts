@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { BankParser, ParsedTransaction } from '@/types/parsers'
+import { BankParser, ParsedTransaction, ParseResult } from '@/types/parsers'
 import { getPdfJs, getPdfConfig } from './pdf-config'
 
 export const axisParser: BankParser = {
@@ -8,7 +8,7 @@ export const axisParser: BankParser = {
   detectFormat(fileName: string, _: Uint8Array): boolean {
     return fileName.toLowerCase().includes('axis')
   },
-  async parse(buffer: ArrayBuffer, _: string): Promise<ParsedTransaction[]> {
+  async parse(buffer: ArrayBuffer, _: string): Promise<ParseResult> {
     const pdfjs = await getPdfJs()
     const data = new Uint8Array(buffer)
 
@@ -16,8 +16,7 @@ export const axisParser: BankParser = {
       const loadingTask = pdfjs.getDocument(await getPdfConfig(data))
       const pdf = await loadingTask.promise
       const transactions: ParsedTransaction[] = []
-
-
+      let accountNumber = ''
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         const page = await pdf.getPage(pageNum)
@@ -41,6 +40,14 @@ export const axisParser: BankParser = {
           const lineItems = linesMap[y].sort((a, b) => a.transform[4] - b.transform[4])
           const lineText = lineItems.map((item) => item.str).join(' ').replace(/\s+/g, ' ').trim()
 
+          // Account number extraction
+          if (pageNum === 1 && !accountNumber) {
+            const accMatch = lineText.match(/Account No\s*:\s*(\d+)/i) || 
+                            lineText.match(/A\/C No\s*:\s*(\d+)/i) ||
+                            lineText.match(/Customer ID\s*:\s*(\d+)/i) // Fallback for Axis
+            if (accMatch) accountNumber = accMatch[1].slice(-4)
+          }
+
           // Skip empty lines and headers
           if (!lineText || lineText.length < 5) continue
 
@@ -52,8 +59,6 @@ export const axisParser: BankParser = {
           const sep = rawDate.includes('-') ? '-' : '/'
           const [dd, mm, yyyy] = rawDate.split(sep)
           const dateIso = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
-
-
 
           // Extract all numbers from the line (skip the date itself)
           const restOfLine = lineText.slice(dateMatch[0].length).trim()
@@ -120,8 +125,7 @@ export const axisParser: BankParser = {
         }
       }
 
-
-      return transactions
+      return { transactions, accountNumber, bankName: 'Axis Bank' }
 
     } catch (error) {
       console.error('[AxisParser] PDF Parse Error:', error)
@@ -131,4 +135,4 @@ export const axisParser: BankParser = {
       throw new Error(`Failed to parse Axis PDF: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
-}
+} satisfies BankParser

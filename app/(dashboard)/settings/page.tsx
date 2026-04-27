@@ -12,7 +12,12 @@ import * as Switch from '@radix-ui/react-switch'
 import * as Select from '@radix-ui/react-select'
 import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import * as Avatar from '@radix-ui/react-avatar'
-import { useProfile, useUpdateProfile, useNotificationPrefs, useUpdateNotifications, useCustomCategories, useCreateCategory, useDeleteCategory } from '@/hooks/useSettings'
+import { 
+  useProfile, useUpdateProfile, 
+  useNotificationPrefs, useUpdateNotifications, 
+  useCustomCategories, useCreateCategory, useDeleteCategory,
+  useAccounts, useUpdateAccount, useDeleteAccount
+} from '@/hooks/useSettings'
 import { useSubscription } from '@/hooks/useSubscription'
 import { useToast } from '@/components/ui/toast'
 import PlanBadge from '@/components/subscription/PlanBadge'
@@ -24,7 +29,7 @@ const TABS: { id: SettingsTab; label: string; icon: React.ComponentType<{ classN
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'categories', label: 'Categories', icon: Tag },
-  { id: 'accounts', label: 'Accounts', icon: Building2 },
+  { id: 'accounts', label: 'Bank Accounts', icon: Building2 },
   { id: 'subscription', label: 'Subscription', icon: Zap },
   { id: 'data', label: 'Data & Privacy', icon: Shield },
   { id: 'danger', label: 'Danger Zone', icon: AlertTriangle, color: 'text-red-400' },
@@ -392,36 +397,91 @@ const CategoriesSection = () => {
   )
 }
 
+interface Account {
+  id: string;
+  bank_name: string;
+  account_label?: string;
+  account_number_last4: string;
+  transaction_count?: number;
+}
+
 const AccountsSection = () => {
   const { toast } = useToast()
-  // Mock data for now as per instructions (or fetch if available)
-  const [accounts, setAccounts] = useState([
-    { id: '1', bank: 'HDFC Bank', label: 'Main Savings', last4: '4592', txCount: 124, status: 'Active' },
-    { id: '2', bank: 'ICICI Bank', label: 'Business Account', last4: '8812', txCount: 45, status: 'Active' },
-  ])
+  const { data: accounts, isLoading } = useAccounts()
+  const deleteAccount = useDeleteAccount()
+  const updateAccount = useUpdateAccount()
+
+  const [editingAccount, setEditingAccount] = useState<{ id: string, label: string } | null>(null)
+
+  if (isLoading) return <div className="space-y-4 animate-pulse">
+    {[1,2,3].map(i => <div key={i} className="h-24 bg-surface2 rounded-xl" />)}
+  </div>
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteAccount.mutateAsync(id)
+      toast('✓ Bank account removed', undefined, 'success')
+    } catch {
+      toast('Error removing account', undefined, 'error')
+    }
+  }
+
+  const handleRename = async () => {
+    if (!editingAccount) return
+    try {
+      await updateAccount.mutateAsync({ id: editingAccount.id, account_label: editingAccount.label })
+      setEditingAccount(null)
+      toast('✓ Account renamed', undefined, 'success')
+    } catch {
+      toast('Error renaming account', undefined, 'error')
+    }
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl pb-10">
       <div className="grid grid-cols-1 gap-4 mb-8">
-        <AnimatePresence>
-          {accounts.map(acc => (
+        <AnimatePresence mode="popLayout">
+          {accounts?.map((acc: Account) => (
             <motion.div 
               key={acc.id}
+              layout
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-surface2/40 border border-border rounded-xl p-5 hover:border-brand-green/20 transition-all flex items-start justify-between group"
             >
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-surface2 border border-border flex items-center justify-center font-display font-bold text-brand-green text-lg">
-                  {acc.bank[0]}
+                  {acc.bank_name?.[0]}
                 </div>
                 <div>
-                  <h4 className="font-display text-white text-base">{acc.bank}</h4>
-                  <p className="font-mono text-xs text-text-muted">{acc.label} (•••• {acc.last4})</p>
+                  {editingAccount?.id === acc.id ? (
+                    <div className="flex items-center gap-2">
+                      <input 
+                        autoFocus
+                        value={editingAccount.label}
+                        onChange={e => setEditingAccount({ ...editingAccount, label: e.target.value })}
+                        onKeyDown={e => e.key === 'Enter' && handleRename()}
+                        className="bg-[#0D0F14] border border-brand-green/30 rounded px-2 py-1 text-xs font-mono text-white outline-none"
+                      />
+                      <button onClick={handleRename} className="p-1 text-brand-green"><Check className="w-3 h-3" /></button>
+                    </div>
+                  ) : (
+                    <h4 className="font-display text-white text-base">{acc.bank_name}</h4>
+                  )}
+                  <p className="font-mono text-xs text-text-muted">
+                    {acc.account_label || 'Primary Account'} (•••• {acc.account_number_last4 || '????'})
+                  </p>
                 </div>
               </div>
               <div className="flex flex-col items-end gap-3">
                 <div className="flex gap-2">
-                   <button className="p-2 text-text-muted hover:text-white transition-colors"><Pencil className="w-4 h-4" /></button>
+                   <button 
+                     onClick={() => setEditingAccount({ id: acc.id, label: acc.account_label || '' })}
+                     className="p-2 text-text-muted hover:text-white transition-colors"
+                   >
+                     <Pencil className="w-4 h-4" />
+                   </button>
                    
                    <AlertDialog.Root>
                      <AlertDialog.Trigger asChild>
@@ -430,43 +490,49 @@ const AccountsSection = () => {
                      <AlertDialog.Portal>
                        <AlertDialog.Overlay className="fixed inset-0 bg-black/60 z-[100] backdrop-blur-sm" />
                        <AlertDialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-md bg-[#141720] border border-border p-6 rounded-2xl z-[101] shadow-2xl">
-                         <AlertDialog.Title className="font-display text-xl text-white mb-2">Delete {acc.label}?</AlertDialog.Title>
+                         <AlertDialog.Title className="font-display text-xl text-white mb-2">Remove {acc.bank_name}?</AlertDialog.Title>
                          <AlertDialog.Description className="font-mono text-xs text-text-muted mb-6 leading-relaxed">
-                           This will permanently remove this account and all {acc.txCount} transactions imported from it. This cannot be undone.
+                           This will permanently remove this bank account and all associated transactions. This action cannot be undone.
                          </AlertDialog.Description>
                          <div className="flex justify-end gap-3">
                            <AlertDialog.Cancel className="px-4 py-2 text-xs font-mono text-text-muted hover:text-white">Cancel</AlertDialog.Cancel>
                            <AlertDialog.Action 
-                             onClick={() => {
-                               setAccounts(prev => prev.filter(a => a.id !== acc.id))
-                               toast('Account deleted', undefined, 'info')
-                             }}
+                             onClick={() => handleDelete(acc.id)}
                              className="px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-mono rounded-md hover:bg-red-500/20"
                            >
-                             Delete Account
+                             Remove Account
                            </AlertDialog.Action>
                          </div>
                        </AlertDialog.Content>
                      </AlertDialog.Portal>
                    </AlertDialog.Root>
                 </div>
-                <span className="text-[10px] font-mono text-brand-green/60 uppercase tracking-widest">{acc.txCount} transactions</span>
+                <span className="text-[10px] font-mono text-brand-green/60 uppercase tracking-widest">{acc.transaction_count || 0} transactions</span>
               </div>
             </motion.div>
           ))}
         </AnimatePresence>
 
-        <button className="border-2 border-dashed border-border/40 rounded-xl p-8 hover:border-brand-green/30 hover:bg-brand-green/5 transition-all flex flex-col items-center gap-3 group">
+        <button 
+          onClick={() => window.location.href = '/upload'}
+          className="border-2 border-dashed border-border/40 rounded-xl p-8 hover:border-brand-green/30 hover:bg-brand-green/5 transition-all flex flex-col items-center gap-3 group"
+        >
           <div className="w-10 h-10 rounded-full border border-dashed border-border group-hover:border-brand-green/50 flex items-center justify-center text-text-muted group-hover:text-brand-green transition-colors">
             <Plus className="w-5 h-5" />
           </div>
-          <span className="font-display text-sm text-text-muted group-hover:text-white">Add Bank Account</span>
+          <div className="text-center">
+            <span className="font-display text-sm text-text-muted group-hover:text-white block">Add Bank Account</span>
+            <span className="text-[10px] font-mono text-text-muted/50 mt-1 block">Automatically detected when you upload a statement</span>
+          </div>
         </button>
       </div>
 
-      <div className="bg-surface2/20 border border-border/40 rounded-xl p-5">
-        <h5 className="font-mono text-[10px] uppercase text-text-muted mb-4 tracking-widest">Upload History</h5>
-        <p className="text-[11px] font-mono text-text-muted italic">Statement upload history will be displayed here.</p>
+      <div className="bg-brand-green/5 border border-brand-green/10 rounded-xl p-5 flex gap-4">
+        <Lightbulb className="w-5 h-5 text-brand-green shrink-0 mt-1" />
+        <p className="text-[11px] font-mono text-text-muted leading-relaxed">
+          SpendSense automatically detects your bank and account number when you upload a statement. 
+          You can manage your discovered accounts here.
+        </p>
       </div>
     </motion.div>
   )

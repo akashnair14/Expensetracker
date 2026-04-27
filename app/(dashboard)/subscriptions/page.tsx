@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { format, subMonths } from 'date-fns'
+import { Transaction } from '@/types'
 
 interface Subscription {
   merchant: string
@@ -31,35 +32,66 @@ export default function SubscriptionsPage() {
     }
   })
 
-  // Basic logic to identify subscriptions: same merchant, same amount, seen multiple times
+  // Refined logic to identify subscriptions: 
+  // 1. Recurring keywords (SI, AUTOPAY, NACH, etc.)
+  // 2. Consistent interval (approx 25-35 days for monthly)
+  // 3. Same merchant and consistent amount
   const detectedSubscriptions = useMemo(() => {
     if (!txData?.transactions) return []
     
-    const merchantMap: Record<string, { amounts: number[], category: string, dates: string[] }> = {}
+    const merchantMap: Record<string, { txs: Transaction[] }> = {}
     
-    txData.transactions.forEach((tx: { is_debit: boolean; merchant: string; category: string; amount: number; date: string }) => {
+    txData.transactions.forEach((tx: Transaction) => {
       if (!tx.is_debit || !tx.merchant) return
       if (!merchantMap[tx.merchant]) {
-        merchantMap[tx.merchant] = { amounts: [], category: tx.category, dates: [] }
+        merchantMap[tx.merchant] = { txs: [] }
       }
-      merchantMap[tx.merchant].amounts.push(tx.amount)
-      merchantMap[tx.merchant].dates.push(tx.date)
+      merchantMap[tx.merchant].txs.push(tx)
     })
+    
+    const RECURRING_KEYWORDS = [
+      'SI ', 'STANDING INSTRUCTION', 'AUTOPAY', 'RECURRING', 
+      'NACH', 'ACH ', 'ECS ', 'MANDATE', 'BILLPAY'
+    ]
 
     const subs: Subscription[] = []
     Object.entries(merchantMap).forEach(([merchant, data]) => {
-      // If seen more than once with roughly same amount
-      if (data.amounts.length >= 2) {
-        const avgAmount = data.amounts.reduce((a, b) => a + b, 0) / data.amounts.length
-        const isConsistent = data.amounts.every(a => Math.abs(a - avgAmount) < avgAmount * 0.1)
+      const txs = data.txs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      
+      if (txs.length >= 2) {
+        const amounts = txs.map(t => Number(t.amount))
+        const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length
+        const isConsistentAmount = amounts.every(a => Math.abs(a - avgAmount) < Math.max(50, avgAmount * 0.1))
         
-        if (isConsistent) {
+        // Check for recurring indicators
+        const hasRecurringKeyword = txs.some(t => {
+          const desc = t.description.toUpperCase()
+          return RECURRING_KEYWORDS.some(kw => desc.includes(kw))
+        })
+
+        // Check for interval consistency (approx 28-32 days)
+        let hasMonthlyInterval = false
+        if (txs.length >= 2) {
+          const intervals = []
+          for (let i = 1; i < txs.length; i++) {
+            const d1 = new Date(txs[i-1].date)
+            const d2 = new Date(txs[i].date)
+            const diffDays = Math.ceil(Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24))
+            intervals.push(diffDays)
+          }
+          // If any interval is roughly a month (25-35 days) or a year (350-380 days)
+          hasMonthlyInterval = intervals.some(days => (days >= 25 && days <= 35) || (days >= 350 && days <= 380))
+        }
+
+        // A transaction is a subscription if:
+        // (Has keyword AND consistent amount) OR (Consistent interval AND consistent amount)
+        if (isConsistentAmount && (hasRecurringKeyword || hasMonthlyInterval)) {
           subs.push({
             merchant,
             amount: avgAmount,
-            category: data.category,
-            frequency: 'Monthly',
-            nextBilling: format(new Date(), 'dd MMM'), // Placeholder
+            category: txs[0].category || 'Other',
+            frequency: 'Monthly', // Could be refined based on intervals
+            nextBilling: format(new Date(), 'dd MMM'),
             status: 'Active'
           })
         }
@@ -102,7 +134,9 @@ export default function SubscriptionsPage() {
         </div>
         <div className="bg-surface border border-border p-6 rounded-2xl">
           <span className="text-[10px] font-mono text-text-muted uppercase tracking-widest">Upcoming Bills</span>
-          <div className="text-3xl font-display text-brand-green mt-1">3 Bills</div>
+          <div className="text-3xl font-display text-brand-green mt-1">
+            {detectedSubscriptions.length} {detectedSubscriptions.length === 1 ? 'Bill' : 'Bills'}
+          </div>
         </div>
       </div>
 

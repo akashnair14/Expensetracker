@@ -107,3 +107,60 @@ export function useDeleteCategory() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'categories'] }),
   })
 }
+
+export function useAccounts() {
+  return useQuery({
+    queryKey: ['settings', 'accounts'],
+    queryFn: async () => {
+      const res = await fetch('/api/settings/accounts')
+      if (!res.ok) throw new Error('Failed to fetch accounts')
+      return res.json()
+    },
+  })
+}
+
+export function useCreateAccount() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (data: { bank_name: string; account_label?: string; account_number_last4?: string }) => {
+      const res = await fetch('/api/settings/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error('Failed to create account')
+      return res.json()
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'accounts'] }),
+  })
+}
+
+export function useUpdateAccount() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: string; bank_name?: string; account_label?: string }) => {
+      const res = await fetch(`/api/settings/accounts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error('Failed to update account')
+      return res.json()
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'accounts'] }),
+  })
+}
+
+export function useDeleteAccount() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/settings/accounts/${id}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error('Failed to delete account')
+      return res.json()
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'accounts'] }),
+  })
+}

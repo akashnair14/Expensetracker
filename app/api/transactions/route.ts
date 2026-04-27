@@ -46,17 +46,15 @@ export async function GET(request: Request) {
       query = query.or(`description.ilike.%${search}%,merchant.ilike.%${search}%`)
     }
 
-    // Aggregate stats query
-    let statsQuery = supabase.from('transactions').select('amount, is_debit, category')
-    statsQuery = statsQuery.eq('user_id', user.id)
+    // Aggregate stats query with grouping for charts
+    let statsQuery = supabase
+      .from('transactions')
+      .select('amount, is_debit, category, date')
+      .eq('user_id', user.id)
     
     if (account_id && account_id !== 'all') statsQuery = statsQuery.eq('account_id', account_id)
     if (start_date) statsQuery = statsQuery.gte('date', start_date)
     if (end_date) statsQuery = statsQuery.lte('date', end_date)
-    if (category && category !== 'all') statsQuery = statsQuery.in('category', category.split(','))
-    if (type === 'debits') statsQuery = statsQuery.eq('is_debit', true)
-    else if (type === 'credits') statsQuery = statsQuery.eq('is_debit', false)
-    if (search) statsQuery = statsQuery.or(`description.ilike.%${search}%,merchant.ilike.%${search}%`)
 
     query = query.order('date', { ascending: false }).range(offset, offset + limit - 1)
 
@@ -72,17 +70,23 @@ export async function GET(request: Request) {
 
     let totalDebit = 0
     let totalCredit = 0
-    const categoryBreakdown: Record<string, number> = {}
+    const categoryTotals: Record<string, number> = {}
+    const dailyStats: Record<string, { income: number, expense: number }> = {}
 
     if (!statsError && statsData) {
       statsData.forEach(tx => {
         const amountNum = Number(tx.amount)
+        const date = tx.date
+        
+        if (!dailyStats[date]) dailyStats[date] = { income: 0, expense: 0 }
+        
         if (tx.is_debit) {
           totalDebit += amountNum
-          const cat = tx.category || 'Uncategorized'
-          categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + amountNum
+          dailyStats[date].expense += amountNum
+          categoryTotals[tx.category || 'Uncategorized'] = (categoryTotals[tx.category || 'Uncategorized'] || 0) + amountNum
         } else {
           totalCredit += amountNum
+          dailyStats[date].income += amountNum
         }
       })
     }
@@ -94,7 +98,8 @@ export async function GET(request: Request) {
       totalPages: Math.ceil((count || 0) / limit),
       totalDebit,
       totalCredit,
-      categoryBreakdown
+      categoryBreakdown: categoryTotals,
+      dailyStats
     })
 
   } catch (error: unknown) {

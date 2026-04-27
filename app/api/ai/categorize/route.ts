@@ -38,10 +38,12 @@ export async function POST(request: Request) {
 
     // Call Gemini to categorize uncached merchants
     let allCategories: Record<string, string> = {}
+    let cleanedMerchants: Record<string, string> = {}
 
     if (uncachedMerchants && uncachedMerchants.length > 0) {
       const result = await categorizeMerchants(uncachedMerchants, user.id)
       allCategories = result.categories
+      cleanedMerchants = result.cleanedMerchants
       
       // Only cache mappings that were AI-generated (not from user's custom rules)
       const aiGeneratedMappings = result.aiGeneratedMerchants.map(merchant => ({
@@ -62,9 +64,26 @@ export async function POST(request: Request) {
       }
     }
 
-    // Apply categories
-    const transactionsToInsert = transactions.map((tx: { merchant?: string; [key: string]: unknown }) => {
+    interface TempTransaction {
+      id: string;
+      account_id: string;
+      user_id: string;
+      date: string;
+      amount: number | string;
+      description: string;
+      is_debit: boolean;
+      merchant?: string;
+    }
+
+    interface FinalTransaction extends TempTransaction {
+      merchant: string;
+      category: string;
+    }
+
+    // Apply categories and filter to valid DB columns
+    const transactionsToInsert = transactions.map((tx: TempTransaction): FinalTransaction => {
       let finalCategory = 'Other'
+      let finalMerchant = tx.merchant || 'UNKNOWN'
       
       const merchantStr = tx.merchant || 'UNKNOWN'
       const hash = merchantStr.substring(0, 50)
@@ -74,31 +93,82 @@ export async function POST(request: Request) {
       } else if (allCategories[hash]) {
         finalCategory = allCategories[hash]
       }
+
+      // Use cleaned merchant name if available
+      if (cleanedMerchants[merchantStr]) {
+        finalMerchant = cleanedMerchants[merchantStr]
+      } else if (cleanedMerchants[hash]) {
+        finalMerchant = cleanedMerchants[hash]
+      }
       
       return {
-        ...tx,
-        category: finalCategory,
+        id: tx.id,
+        account_id: tx.account_id,
+        user_id: tx.user_id,
+        date: tx.date,
+        amount: tx.amount,
+        description: tx.description,
+        is_debit: tx.is_debit,
+        merchant: finalMerchant,
+        category: finalCategory
       }
     })
 
-    // Bulk insert to transactions table
-    const { error: insertError } = await supabase
-      .from('transactions')
-      .upsert(transactionsToInsert, { onConflict: 'id' })
+    // 7. Deduplication Check
+    // Get date range of new transactions to minimize the fetch from DB
+    const dates = transactionsToInsert.map((tx: FinalTransaction) => tx.date).sort()
+    const startDate = dates[0]
+    const endDate = dates[dates.length - 1]
 
-    if (insertError) throw insertError
+    const { data: existingTxs } = await supabase
+      .from('transactions')
+      .select('date, amount, description, account_id')
+      .eq('user_id', user.id)
+      .gte('date', startDate)
+      .lte('date', endDate)
+
+    const existingMap = new Set(
+      existingTxs?.map(tx => `${tx.date}_${Number(tx.amount)}_${tx.description}_${tx.account_id}`) || []
+    )
+
+    const finalTransactions = transactionsToInsert.filter((tx: FinalTransaction) => {
+      const key = `${tx.date}_${Number(tx.amount)}_${tx.description}_${tx.account_id}`
+      return !existingMap.has(key)
+    })
+
+    if (finalTransactions.length > 0) {
+      // Bulk insert to transactions table
+      const { error: insertError } = await supabase
+        .from('transactions')
+        .upsert(finalTransactions, { onConflict: 'id' })
+
+      if (insertError) throw insertError
+    }
 
     // Delete temp JSON
     await supabase.storage.from('statements').remove([`${user.id}/temp/${jobId}.json`])
 
     return NextResponse.json({ 
       success: true, 
-      imported: transactionsToInsert.length,
+      imported: finalTransactions.length,
+      skipped: transactionsToInsert.length - finalTransactions.length,
       categories: allCategories
     })
 
   } catch (error: unknown) {
-    console.error('Categorize error:', error)
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to import' }, { status: 400 })
+    const err = error as { message?: string; code?: string; details?: string; stack?: string };
+    console.error('Categorize error details:', {
+      message: err?.message,
+      code: err?.code,
+      details: err?.details,
+      stack: err?.stack
+    })
+    
+    // Return a more descriptive error message if available
+    const errorMessage = err?.message || (typeof error === 'string' ? error : 'Failed to import transactions');
+    return NextResponse.json({ 
+      error: errorMessage,
+      code: err?.code
+    }, { status: 400 })
   }
 }

@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { BankParser, ParsedTransaction } from '@/types/parsers'
+import { BankParser, ParsedTransaction, ParseResult } from '@/types/parsers'
 
 export const sbiParser: BankParser = {
   bankName: 'SBI',
@@ -9,13 +9,14 @@ export const sbiParser: BankParser = {
     return fileName.toLowerCase().includes('sbi')
   },
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async parse(buffer: ArrayBuffer, _fileName: string): Promise<ParsedTransaction[]> {
+  async parse(buffer: ArrayBuffer, _fileName: string): Promise<ParseResult> {
     const workbook = XLSX.read(buffer, { type: 'buffer' })
     const sheetName = workbook.SheetNames[0]
     const sheet = workbook.Sheets[sheetName]
     const data = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false })
     
     const transactions: ParsedTransaction[] = []
+    let accountNumber = ''
     let dataStarted = false
     
     const months: Record<string, string> = {
@@ -27,6 +28,13 @@ export const sbiParser: BankParser = {
       if (!row || row.length === 0) continue
       
       const firstCol = String(row[0] || '').trim()
+
+      if (!accountNumber) {
+        const rowText = row.join(' ')
+        const accMatch = rowText.match(/Account Number\s*:\s*(\d+)/i) || 
+                        rowText.match(/Account No\s*:\s*(\d+)/i)
+        if (accMatch) accountNumber = accMatch[1].slice(-4)
+      }
       
       if (!dataStarted) {
         if (firstCol.toLowerCase().includes('txn date')) {
@@ -79,6 +87,6 @@ export const sbiParser: BankParser = {
       })
     }
     
-    return transactions
+    return { transactions, accountNumber, bankName: 'SBI' }
   }
-}
+} satisfies BankParser

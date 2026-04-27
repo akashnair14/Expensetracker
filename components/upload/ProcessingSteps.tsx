@@ -145,25 +145,27 @@ export default function ProcessingSteps({ uploadState }: ProcessingStepsProps) {
   }, [uploadState])
 
   return (
-    <div className="flex flex-col gap-10">
-      <div className="relative flex items-start justify-between px-2 md:px-14 pt-6">
-        {/* Connector lines */}
+    <div className="flex flex-col gap-12">
+      <div className="relative flex items-start justify-between px-4 md:px-16 pt-8">
+        {/* Connector lines - Enhanced with glow and smoother transitions */}
         {[0, 1].map(i => (
           <div
             key={i}
-            className="absolute top-[39px] h-[2px] rounded-full overflow-hidden"
+            className="absolute top-[43px] h-[3px] rounded-full overflow-hidden"
             style={{
-              backgroundColor: '#1C2030',
-              left: `calc(${i === 0 ? '33.3%' : '66.6%'} - 16px)`,
-              width: 'calc(33.3% - 20px)',
+              backgroundColor: '#161924',
+              left: `calc(${i === 0 ? '33.3%' : '66.6%'} - 24px)`,
+              width: 'calc(33.3% - 24px)',
+              boxShadow: lineProgress[i] > 0 ? `0 0 10px ${STEPS[i].glow}` : 'none',
             }}
           >
             <div
-              className="h-full rounded-full transition-none"
+              className="h-full rounded-full"
               style={{
                 background: `linear-gradient(90deg, ${STEPS[i].color}, ${STEPS[i + 1].color})`,
                 width: `${lineProgress[i] * 100}%`,
-                transition: 'width 0.08s linear',
+                transition: 'width 0.15s ease-out',
+                boxShadow: lineProgress[i] > 0 ? `0 0 15px ${STEPS[i].color}` : 'none',
               }}
             />
           </div>
@@ -176,22 +178,30 @@ export default function ProcessingSteps({ uploadState }: ProcessingStepsProps) {
           const isDoneStep = status === 'done'
 
           return (
-            <div key={i} className="flex flex-col items-center gap-3 z-10">
-              {/* Icon circle */}
-              <div className="relative w-[72px] h-[72px] flex items-center justify-center">
-                {/* Static background */}
+            <div key={i} className="flex flex-col items-center gap-4 z-10 group">
+              {/* Icon circle - Glassmorphism + Glow */}
+              <div className="relative w-[82px] h-[82px] flex items-center justify-center transition-transform duration-500 hover:scale-105">
+                {/* Outer Glow for done/active */}
+                {(isDoneStep || isActive) && (
+                  <div 
+                    className="absolute inset-0 rounded-full blur-[20px] opacity-20"
+                    style={{ backgroundColor: step.color }}
+                  />
+                )}
+
+                {/* Main Circle */}
                 <div
-                  className="absolute inset-0 rounded-full"
+                  className="absolute inset-0 rounded-full backdrop-blur-xl transition-all duration-500"
                   style={{
                     backgroundColor: isDoneStep
                       ? `${step.color}1A`
                       : isActive
                       ? `${step.color}12`
-                      : '#161924',
+                      : 'rgba(255,255,255,0.02)',
                     border: `1.5px solid ${
-                      isDoneStep || isActive ? `${step.color}66` : '#1E2438'
+                      isDoneStep || isActive ? `${step.color}80` : 'rgba(255,255,255,0.08)'
                     }`,
-                    transition: 'background-color 0.4s, border-color 0.4s',
+                    boxShadow: isActive ? `0 0 25px ${step.glow}` : isDoneStep ? `0 0 15px ${step.glow}44` : 'none',
                   }}
                 />
 
@@ -199,12 +209,11 @@ export default function ProcessingSteps({ uploadState }: ProcessingStepsProps) {
                 <AnimatePresence>
                   {isActive && (
                     <motion.div
-                      key="ring"
+                      key="active-elements"
                       className="absolute inset-0"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      transition={{ duration: 0.25 }}
                     >
                       <SpinningRing color={step.color} />
                       <PulsingGlow glow={step.glow} />
@@ -212,73 +221,72 @@ export default function ProcessingSteps({ uploadState }: ProcessingStepsProps) {
                   )}
                 </AnimatePresence>
 
-                {/* Burst ring on done */}
+                {/* Burst ring on transition to done */}
                 <AnimatePresence>
                   {isDoneStep && (
                     <motion.div
                       key={`burst-${i}`}
                       className="absolute inset-0 rounded-full pointer-events-none"
-                      initial={{ opacity: 0.9, scale: 1 }}
-                      animate={{ opacity: 0, scale: 1.7 }}
-                      transition={{ duration: 0.6, ease: 'easeOut' }}
-                      style={{ border: `2px solid ${step.color}` }}
+                      initial={{ opacity: 1, scale: 1, borderWidth: '2px' }}
+                      animate={{ opacity: 0, scale: 1.8, borderWidth: '0px' }}
+                      transition={{ duration: 0.8, ease: 'easeOut' }}
+                      style={{ border: `2.5px solid ${step.color}` }}
                     />
                   )}
                 </AnimatePresence>
 
                 {/* Icon / checkmark */}
-                <AnimatePresence mode="wait">
-                  {isDoneStep ? (
-                    <motion.div
-                      key="check"
-                      initial={{ scale: 0, rotate: -20, opacity: 0 }}
-                      animate={{ scale: 1, rotate: 0, opacity: 1 }}
-                      exit={{ scale: 0, opacity: 0 }}
-                      transition={{ type: 'spring', stiffness: 380, damping: 18 }}
-                    >
-                      <Check
-                        className="w-6 h-6"
-                        strokeWidth={2.5}
-                        style={{ color: step.color }}
-                      />
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="icon"
-                      animate={isActive ? { scale: [1, 1.14, 1] } : { scale: 1 }}
-                      transition={
-                        isActive
-                          ? { repeat: Infinity, duration: 1.5, ease: 'easeInOut' }
-                          : { duration: 0.2 }
-                      }
-                    >
-                      <step.icon
-                        className="w-6 h-6"
-                        style={{
-                          color: isActive ? step.color : '#374151',
-                          transition: 'color 0.3s',
-                        }}
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <div className="relative z-20">
+                  <AnimatePresence mode="wait">
+                    {isDoneStep ? (
+                      <motion.div
+                        key="check"
+                        initial={{ scale: 0.5, rotate: -30, opacity: 0 }}
+                        animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                      >
+                        <Check
+                          className="w-7 h-7"
+                          strokeWidth={3}
+                          style={{ color: step.color }}
+                        />
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="icon"
+                        animate={isActive ? { 
+                          scale: [1, 1.15, 1],
+                          filter: [`drop-shadow(0 0 0px ${step.color}00)`, `drop-shadow(0 0 8px ${step.color}66)`, `drop-shadow(0 0 0px ${step.color}00)`]
+                        } : { scale: 1 }}
+                        transition={isActive ? { repeat: Infinity, duration: 2, ease: 'easeInOut' } : {}}
+                      >
+                        <step.icon
+                          className="w-7 h-7"
+                          style={{
+                            color: isActive ? step.color : '#4B5563',
+                            transition: 'color 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+                          }}
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
 
-              {/* Label */}
-              <div className="flex flex-col items-center gap-1 text-center min-w-[90px]">
+              {/* Labels - Better typography and spacing */}
+              <div className="flex flex-col items-center gap-1.5 text-center px-1">
                 <span
-                  className="text-[12px] font-ui font-semibold"
+                  className="text-[13px] font-ui font-bold tracking-tight"
                   style={{
-                    color: isDoneStep || isActive ? '#fff' : '#374151',
-                    transition: 'color 0.3s',
+                    color: isDoneStep || isActive ? '#FFFFFF' : '#6B7394',
+                    transition: 'color 0.5s',
                   }}
                 >
                   {step.label}
                 </span>
                 <motion.span
-                  className="text-[10px] font-mono whitespace-nowrap"
-                  animate={{ opacity: isActive ? 1 : isDoneStep ? 0.7 : 0.3 }}
-                  transition={{ duration: 0.3 }}
+                  className="text-[10px] font-mono font-bold uppercase tracking-wider"
+                  animate={{ opacity: isActive ? 1 : isDoneStep ? 0.9 : 0.4 }}
                   style={{ color: step.color }}
                 >
                   {isDoneStep ? 'Complete ✓' : isActive ? step.sublabel : 'Waiting'}
@@ -289,32 +297,45 @@ export default function ProcessingSteps({ uploadState }: ProcessingStepsProps) {
         })}
       </div>
 
-      {/* Global Status Message */}
-      <div className="flex flex-col items-center justify-center pt-2">
+      {/* Global Status Message - Premium Badge */}
+      <div className="flex flex-col items-center justify-center pt-4">
         <AnimatePresence mode="wait">
           <motion.div
             key={uploadState}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="flex items-center gap-3 px-6 py-3 rounded-full bg-surface2/30 border border-white/5"
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -10 }}
+            className="relative flex items-center gap-3 px-8 py-3.5 rounded-full overflow-hidden"
+            style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1.5px solid rgba(255, 255, 255, 0.05)',
+              boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
+              backdropFilter: 'blur(8px)',
+            }}
           >
+            {/* Subtle moving light effect across the badge */}
+            <motion.div 
+              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -skew-x-12"
+              animate={{ x: ['-100%', '200%'] }}
+              transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
+            />
+
             {uploadState === 'done' ? (
-              <div className="flex items-center gap-2 text-brand-green">
-                <Check className="w-4 h-4" />
-                <span className="text-sm font-ui font-medium uppercase tracking-wider">All Done! Redirecting...</span>
+              <div className="flex items-center gap-3 text-brand-green relative z-10">
+                <div className="w-2 h-2 rounded-full bg-brand-green shadow-[0_0_12px_#00E5A0]" />
+                <span className="text-[12px] font-ui font-bold uppercase tracking-[0.15em]">Processing Complete</span>
               </div>
             ) : (
-              <>
+              <div className="flex items-center gap-3 relative z-10">
                 <motion.div
-                  className="w-2 h-2 rounded-full bg-brand-green"
-                  animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
-                  transition={{ repeat: Infinity, duration: 2 }}
+                  className="w-2 h-2 rounded-full bg-brand-green shadow-[0_0_12px_#00E5A0]"
+                  animate={{ opacity: [1, 0.4, 1] }}
+                  transition={{ repeat: Infinity, duration: 1.5 }}
                 />
-                <span className="text-sm font-ui text-text-muted uppercase tracking-widest">
+                <span className="text-[12px] font-ui font-bold text-[#6B7394] uppercase tracking-[0.2em]">
                   {uploadState === 'parsing' ? 'System is processing your file' : 'AI is categorizing transactions'}
                 </span>
-              </>
+              </div>
             )}
           </motion.div>
         </AnimatePresence>

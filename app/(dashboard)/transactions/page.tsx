@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Download, MoreHorizontal, X, AlertCircle, CheckSquare, Square, ChevronDown, FileSearch, RefreshCw } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 
 const CATEGORIES = [
@@ -41,7 +41,7 @@ interface Transaction {
   accounts: { account_number_last4: string };
   is_debit: boolean;
   amount: number;
-  flagged?: boolean;
+  is_flagged?: boolean;
   notes?: string;
 }
 
@@ -50,7 +50,6 @@ function TransactionsContent() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [category, setCategory] = useState('all')
   const [type, setType] = useState('all')
-  const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null)
   const [pullProgress, setPullProgress] = useState(0)
@@ -58,12 +57,14 @@ function TransactionsContent() {
   
   const qc = useQueryClient()
 
+
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300)
     return () => clearTimeout(timer)
   }, [search])
 
-  const fetchTransactions = async (pageParam = 1) => {
+  const fetchTransactions = async ({ pageParam = 1 }) => {
     const params = new URLSearchParams()
     params.set('page', pageParam.toString())
     params.set('limit', '50')
@@ -76,14 +77,27 @@ function TransactionsContent() {
     return res.json()
   }
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['transactions', debouncedSearch, category, type, page],
-    queryFn: () => fetchTransactions(page),
-    placeholderData: (prev) => prev,
+  const { 
+    data, 
+    isLoading, 
+    fetchNextPage, 
+    hasNextPage, 
+    isFetchingNextPage 
+  } = useInfiniteQuery({
+    queryKey: ['transactions', debouncedSearch, category, type],
+    queryFn: fetchTransactions,
+    getNextPageParam: (lastPage) => lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
+    initialPageParam: 1,
   })
 
+  const allTransactions = data?.pages.flatMap(page => page.transactions) || []
+  const latestStats = data?.pages[0] || {} // Totals are the same for all pages as they are for the whole filtered set
+  const totalCount = latestStats.total || 0
+  const totalDebit = latestStats.totalDebit || 0
+  const totalCredit = latestStats.totalCredit || 0
+
   const updateMutation = useMutation({
-    mutationFn: async (payload: { ids: string[], category?: string, notes?: string, flagged?: boolean }) => {
+    mutationFn: async (payload: { ids: string[], category?: string, notes?: string, is_flagged?: boolean }) => {
       const res = await fetch('/api/transactions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -119,11 +133,11 @@ function TransactionsContent() {
   }
 
   const toggleSelectAll = () => {
-    if (!data?.transactions) return
-    if (selectedIds.size === data.transactions.length) {
+    if (allTransactions.length === 0) return
+    if (selectedIds.size === allTransactions.length) {
       setSelectedIds(new Set())
     } else {
-      setSelectedIds(new Set(data.transactions.map((t: { id: string }) => t.id)))
+      setSelectedIds(new Set(allTransactions.map((t: { id: string }) => t.id)))
     }
   }
 
@@ -191,7 +205,7 @@ function TransactionsContent() {
             type="text" 
             placeholder="Search transactions..." 
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => { setSearch(e.target.value); }}
             className="w-full bg-surface border border-border rounded-lg pl-10 pr-4 py-2.5 text-sm text-white font-ui focus:border-brand-green/50 outline-none transition-colors"
           />
         </div>
@@ -199,7 +213,7 @@ function TransactionsContent() {
         <div className="flex items-center gap-3 overflow-x-auto pb-1 md:pb-0 no-scrollbar">
           <select 
             value={category}
-            onChange={(e) => { setCategory(e.target.value); setPage(1); }}
+            onChange={(e) => { setCategory(e.target.value); }}
             className="bg-surface border border-border text-white text-sm rounded-lg px-3 py-2.5 font-ui outline-none appearance-none cursor-pointer hover:border-brand-green/30"
           >
             <option value="all">All Categories</option>
@@ -210,7 +224,7 @@ function TransactionsContent() {
             {['all', 'debits', 'credits'].map(t => (
               <button
                 key={t}
-                onClick={() => { setType(t); setPage(1); }}
+                onClick={() => { setType(t); }}
                 className={`px-4 py-1.5 rounded-md text-xs font-mono capitalize transition-colors ${type === t ? 'bg-surface2 text-white shadow-sm' : 'text-text-muted hover:text-white'}`}
               >
                 {t}
@@ -220,7 +234,7 @@ function TransactionsContent() {
 
           {filtersActive && (
             <button 
-              onClick={() => { setSearch(''); setCategory('all'); setType('all'); setPage(1); }}
+              onClick={() => { setSearch(''); setCategory('all'); setType('all'); }}
               className="text-xs font-mono text-text-muted hover:text-white underline shrink-0 px-2"
             >
               Clear filters
@@ -238,13 +252,13 @@ function TransactionsContent() {
       {/* SUMMARY ROW */}
       <div className="px-6 py-3 border-b border-border bg-surface/50 flex flex-wrap items-center gap-4 text-xs font-mono text-text-muted shrink-0">
         <span className="bg-surface2 px-3 py-1 rounded-full border border-border/50">
-          Showing {data?.transactions?.length || 0} of {data?.total || 0} transactions
+          Showing {allTransactions.length} of {totalCount} transactions
         </span>
         <span className="bg-surface2 px-3 py-1 rounded-full border border-border/50">
-          Total Debit: <span className="text-white">₹{(data?.totalDebit || 0).toLocaleString()}</span>
+          Total Debit: <span className="text-white">₹{(totalDebit).toLocaleString()}</span>
         </span>
         <span className="bg-surface2 px-3 py-1 rounded-full border border-border/50">
-          Total Credit: <span className="text-brand-green">₹{(data?.totalCredit || 0).toLocaleString()}</span>
+          Total Credit: <span className="text-brand-green">₹{(totalCredit).toLocaleString()}</span>
         </span>
       </div>
 
@@ -266,7 +280,7 @@ function TransactionsContent() {
             <div className="w-8 h-8 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
             <p className="font-mono text-sm">Loading transactions...</p>
           </div>
-        ) : data?.transactions?.length === 0 ? (
+        ) : allTransactions.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center max-w-sm mx-auto">
             <div className="w-24 h-24 mb-6 text-border flex items-center justify-center">
               <FileSearch className="w-16 h-16" />
@@ -294,7 +308,7 @@ function TransactionsContent() {
                 <tr className="text-[11px] uppercase tracking-wider font-mono text-text-muted">
                   <th className="py-4 px-4 w-12">
                     <button onClick={toggleSelectAll} className="text-text-muted hover:text-white transition-colors">
-                      {selectedIds.size > 0 && selectedIds.size === data.transactions.length ? <CheckSquare className="w-4 h-4 text-brand-green" /> : <Square className="w-4 h-4" />}
+                      {selectedIds.size > 0 && selectedIds.size === allTransactions.length ? <CheckSquare className="w-4 h-4 text-brand-green" /> : <Square className="w-4 h-4" />}
                     </button>
                   </th>
                   <th className="py-4 px-4 font-normal">Date</th>
@@ -306,29 +320,20 @@ function TransactionsContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
-                {data?.transactions?.map((tx: Transaction) => {
+                {allTransactions.map((tx: Transaction) => {
                   const isSelected = selectedIds.has(tx.id)
                   const catColor = CATEGORY_COLORS[tx.category || 'Uncategorized'] || CATEGORY_COLORS['Uncategorized']
                   
                     return (
-                      <motion.div
-                        key={tx.id}
-                        layout
-                        drag="x"
-                        dragConstraints={{ left: -100, right: 0 }}
-                        dragElastic={0.1}
-                        onDragEnd={(_, info) => {
-                          if (info.offset.x < -80) handleDelete(tx.id)
-                        }}
-                        className="relative"
-                      >
-                        {/* Background Delete Action */}
-                        <div className="absolute inset-0 bg-red-500 flex items-center justify-end px-6 rounded-xl">
-                          <AlertCircle className="w-5 h-5 text-white" />
-                        </div>
-
                         <motion.tr 
                           key={tx.id} 
+                          layout
+                          drag="x"
+                          dragConstraints={{ left: -100, right: 0 }}
+                          dragElastic={0.1}
+                          onDragEnd={(_, info) => {
+                            if (info.offset.x < -80) handleDelete(tx.id)
+                          }}
                           onClick={() => {
                             if (window.navigator.vibrate) window.navigator.vibrate(5)
                             setSelectedTx(tx)
@@ -385,24 +390,25 @@ function TransactionsContent() {
                             </button>
                           </td>
                         </motion.tr>
-                      </motion.div>
                     )
                 })}
               </tbody>
             </table>
             
-            {data?.page < data?.totalPages && (
+            {hasNextPage && (
               <div className="p-4 border-t border-border bg-surface2 flex justify-center">
                 <button 
-                  onClick={() => setPage(p => p + 1)}
-                  className="bg-surface border border-border hover:border-brand-green/30 text-white text-xs font-mono px-6 py-2.5 rounded-full transition-colors shadow-sm"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="bg-surface border border-border hover:border-brand-green/30 text-white text-xs font-mono px-6 py-2.5 rounded-full transition-colors shadow-sm disabled:opacity-50"
                 >
-                  Load 50 more
+                  {isFetchingNextPage ? 'Loading...' : `Load 50 more`}
                 </button>
               </div>
             )}
           </div>
-        )}
+        )
+      }
       </div>
 
       {/* BULK ACTION BAR */}
@@ -540,15 +546,15 @@ function TransactionsContent() {
                     </div>
                     <button 
                       onClick={() => {
-                        const newFlag = !selectedTx.flagged
-                        updateMutation.mutate({ ids: [selectedTx.id], flagged: newFlag })
-                        setSelectedTx({ ...selectedTx, flagged: newFlag })
+                        const newFlag = !selectedTx.is_flagged
+                        updateMutation.mutate({ ids: [selectedTx.id], is_flagged: newFlag })
+                        setSelectedTx({ ...selectedTx, is_flagged: newFlag })
                       }}
-                      className={`w-12 h-6 rounded-full transition-colors relative flex items-center ${selectedTx.flagged ? 'bg-red-500/20 border-red-500/50' : 'bg-surface border-border'} border`}
+                      className={`w-12 h-6 rounded-full transition-colors relative flex items-center ${selectedTx.is_flagged ? 'bg-red-500/20 border-red-500/50' : 'bg-surface border-border'} border`}
                     >
                       <motion.div 
-                        animate={{ x: selectedTx.flagged ? 24 : 2 }}
-                        className={`w-4 h-4 rounded-full ${selectedTx.flagged ? 'bg-red-400' : 'bg-text-muted'}`}
+                        animate={{ x: selectedTx.is_flagged ? 24 : 2 }}
+                        className={`w-4 h-4 rounded-full ${selectedTx.is_flagged ? 'bg-red-400' : 'bg-text-muted'}`}
                       />
                     </button>
                   </div>

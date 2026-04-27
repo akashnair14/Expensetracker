@@ -29,9 +29,9 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null)
   const { canUpload, uploadsRemaining, isPro } = usePlanGate()
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
-  const [bank, setBank] = useState<string>('')
-  const [accountId, setAccountId] = useState<string>('')
-  const [accounts, setAccounts] = useState<{ id: string; bank_name: string; account_label?: string }[]>([])
+  const [bank, setBank] = useState<string>('Auto-detect')
+  const [accountId, setAccountId] = useState<string>('auto')
+  const [accounts, setAccounts] = useState<{ id: string; bank_name: string; account_label?: string; account_number_last4?: string }[]>([])
   const [user, setUser] = useState<User | null>(null)
   
   // review state
@@ -49,6 +49,9 @@ export default function UploadPage() {
       if (nameUpper.includes('HDFC')) setBank('HDFC Bank')
       else if (nameUpper.includes('SBI')) setBank('SBI')
       else if (nameUpper.includes('ICICI')) setBank('ICICI Bank')
+      else setBank('Auto-detect')
+      
+      setAccountId('auto')
       setUploadState('selected')
     }
   }, [])
@@ -59,6 +62,14 @@ export default function UploadPage() {
     multiple: false,
     disabled: !canUpload
   })
+
+  useEffect(() => {
+    if (accountId === 'new') {
+      setTimeout(() => {
+        router.push('/settings?tab=accounts')
+      }, 1200)
+    }
+  }, [accountId, router])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -79,8 +90,8 @@ export default function UploadPage() {
       // ── Step 1 & 2: Upload and parse the PDF ──
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('bank_name', bank)
-      formData.append('account_id', accountId)
+      formData.append('bank_name', bank === 'Auto-detect' ? 'Other' : bank)
+      formData.append('account_id', accountId === 'auto' ? 'new' : accountId)
       
       const res = await fetch('/api/upload', {
         method: 'POST',
@@ -91,6 +102,11 @@ export default function UploadPage() {
       const responseData = contentType?.includes('application/json') ? await res.json() : null
 
       if (!res.ok) {
+        if (responseData?.needsAccount) {
+           setUploadState('selected')
+           setParseWarning('Could not auto-detect the bank account. Please select one manually below.')
+           return
+        }
         const errorMessage = responseData?.error || `Server Error (${res.status}): Please check the server logs.`
         throw new Error(errorMessage)
       }
@@ -157,10 +173,12 @@ export default function UploadPage() {
       
       <div>
         <h1 className="text-3xl font-display text-white mb-2">Upload Statement</h1>
-        <p className="text-text-muted font-mono text-sm">Upload your bank statement to track expenses automatically.</p>
+        <p className="text-text-muted font-mono text-sm">Upload your bank statement to track expenses automatically. We&apos;ll automatically detect your bank account.</p>
       </div>
 
       <AnimatePresence mode="wait">
+
+
         {uploadState === 'idle' && (
           <motion.div
             key="stage1"
@@ -246,6 +264,13 @@ export default function UploadPage() {
             exit={{ opacity: 0, y: -10 }}
             className="flex flex-col gap-6"
           >
+            {parseWarning && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+                <p className="text-xs text-red-400 font-mono">{parseWarning}</p>
+              </div>
+            )}
+
             <div className="bg-surface border border-border rounded-lg p-4 flex items-center justify-between">
               <div className="flex items-center gap-4 overflow-hidden">
                 <div className="p-3 bg-surface2 rounded-lg">
@@ -256,104 +281,136 @@ export default function UploadPage() {
                   <p className="text-xs text-text-muted font-mono mt-0.5">{(file?.size || 0) / 1024 < 1024 ? `${Math.round((file?.size || 0) / 1024)} KB` : `${((file?.size || 0) / (1024 * 1024)).toFixed(1)} MB`}</p>
                 </div>
               </div>
-              <button onClick={() => { setFile(null); setUploadState('idle'); }} className="p-2 text-text-muted hover:text-red-400 transition-colors shrink-0">
+              <button onClick={() => { setFile(null); setUploadState('idle'); setParseWarning(null); }} className="p-2 text-text-muted hover:text-red-400 transition-colors shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex flex-col gap-3">
-              <h3 className="text-sm font-mono text-white">Which bank is this from?</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {BANKS.map(b => (
-                  <button
-                    key={b}
-                    onClick={() => setBank(b)}
-                    className={`flex flex-col items-center justify-center p-3 rounded-lg border transition-all ${
-                      bank === b ? 'border-brand-green bg-brand-green/10' : 'border-border bg-surface hover:border-brand-green/40'
-                    }`}
-                  >
-                    <span className="text-xs font-ui font-medium text-white">{b}</span>
-                    {bank === b && <CheckCircle className="w-4 h-4 text-brand-green mt-2" />}
-                  </button>
-                ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex flex-col gap-3">
+                <h3 className="text-sm font-mono text-white">Bank Name</h3>
+                <select 
+                  value={bank}
+                  onChange={(e) => setBank(e.target.value)}
+                  className="w-full bg-surface border border-border focus:border-brand-green/60 rounded-md py-3 px-3 text-white font-mono text-sm outline-none appearance-none"
+                >
+                  <option value="Auto-detect">Auto-detect Bank</option>
+                  {BANKS.filter(b => b !== 'Other').map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                  <option value="Other">Other / Unknown</option>
+                </select>
               </div>
-            </div>
 
-            <div className="flex flex-col gap-3 mt-2">
-              <h3 className="text-sm font-mono text-white">Which account?</h3>
-              <select 
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className="w-full bg-surface border border-border focus:border-brand-green/60 rounded-md py-3 px-3 text-white font-mono text-sm outline-none appearance-none"
-              >
-                <option value="" disabled>Select account...</option>
-                {accounts.map(acc => (
-                  <option key={acc.id} value={acc.id}>{acc.account_label || acc.bank_name}</option>
-                ))}
-                <option value="new">+ Add new account</option>
-              </select>
+              <div className="flex flex-col gap-3">
+                <h3 className="text-sm font-mono text-white">Target Bank Account</h3>
+                <select 
+                  value={accountId}
+                  onChange={(e) => setAccountId(e.target.value)}
+                  className="w-full bg-surface border border-border focus:border-brand-green/60 rounded-md py-3 px-3 text-white font-mono text-sm outline-none appearance-none"
+                >
+                  <option value="auto">Auto-detect Account</option>
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.account_label || acc.bank_name} {acc.account_number_last4 ? `(**** ${acc.account_number_last4})` : ''}
+                    </option>
+                  ))}
+                  <option value="new">+ Setup new account manually</option>
+                </select>
+              </div>
             </div>
 
             <button 
               onClick={startUpload}
-              disabled={!bank || !accountId}
-              className="w-full bg-brand-green text-[#0D0F14] font-bold font-ui py-3.5 rounded-md mt-4 disabled:opacity-50 hover:bg-brand-green/90 transition-colors shadow-lg shadow-brand-green/20"
+              className="w-full bg-brand-green text-[#0D0F14] font-bold font-ui py-4 rounded-md mt-4 hover:bg-brand-green/90 transition-all shadow-lg shadow-brand-green/20 text-lg group"
             >
-              Parse Statement
+              <span className="flex items-center justify-center gap-2">
+                Start Analysis
+                <CheckCircle className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </span>
             </button>
+
+            <p className="text-[10px] text-text-muted font-mono text-center uppercase tracking-widest">
+              Spending analysis will begin automatically after parsing
+            </p>
           </motion.div>
         )}
 
         {(uploadState === 'parsing' || uploadState === 'importing' || uploadState === 'done') && (
           <motion.div
             key="stage3"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="flex flex-col gap-6"
+            initial={{ opacity: 0, y: 32, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -32, scale: 0.98 }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col gap-10 max-w-3xl mx-auto w-full"
           >
-            <div className="bg-surface border border-border rounded-xl p-8 flex flex-col gap-8">
-
-              {/* ── Animated step pipeline ── */}
+            <div className="bg-[#0A0C14]/60 backdrop-blur-3xl border border-white/5 rounded-[2.5rem] p-10 md:p-16 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] relative overflow-hidden group">
+              {/* Reliable CSS-based noise overlay */}
+              <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]" />
+              
+              {/* Decorative glow */}
+              <div className="absolute -top-24 -right-24 w-48 h-48 bg-brand-green/10 blur-[80px] rounded-full" />
+              <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-blue-500/5 blur-[80px] rounded-full" />
+              
               <ProcessingSteps uploadState={uploadState} />
 
-              {/* ── Warning: parser returned 0 transactions ── */}
+              {/* Error/Warning UI inside the same container for consistency */}
               {!!parseWarning && (
-                <div className="animate-fadeIn text-center flex flex-col items-center gap-4 pt-2">
-                  <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                    <AlertCircle className="w-6 h-6 text-yellow-400" />
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="mt-12 pt-8 border-t border-white/5 flex flex-col items-center gap-5 text-center"
+                >
+                  <div className="w-14 h-14 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                    <AlertCircle className="w-7 h-7 text-yellow-400" />
                   </div>
-                  <p className="text-yellow-400 font-mono text-sm max-w-md">{parseWarning}</p>
+                  <div className="space-y-2">
+                    <p className="text-yellow-400 font-mono text-[13px] max-w-sm mx-auto leading-relaxed">{parseWarning}</p>
+                    <p className="text-[#6B7394] text-[11px] font-mono uppercase tracking-widest">Please verify the file format and try again</p>
+                  </div>
                   <button
                     onClick={() => { setUploadState('selected'); setParseWarning(null); setTransactions([]) }}
-                    className="bg-surface2 text-white font-ui px-6 py-2.5 rounded-md hover:bg-surface2/80 transition-colors text-sm"
+                    className="bg-white/5 text-white font-ui font-bold px-10 py-3.5 rounded-full hover:bg-white/10 transition-all text-[12px] uppercase tracking-widest border border-white/10"
                   >
-                    Try Again
+                    Return to selection
                   </button>
-                </div>
-              )}
-
-              {/* ── Auto-processing status (while importing) ── */}
-              {uploadState === 'importing' && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex flex-col items-center gap-3 py-4"
-                >
-                  <motion.div
-                    className="w-8 h-8 rounded-full border-2 border-brand-green/30 border-t-brand-green"
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
-                  />
-                  <p className="text-text-muted font-mono text-sm">
-                    {transactions.length > 0
-                      ? `Saving ${transactions.length} transactions & categorizing with AI...`
-                      : 'Finishing up...'}
-                  </p>
-                  <p className="text-[11px] text-text-muted/60 font-mono">Redirecting to dashboard shortly</p>
                 </motion.div>
               )}
             </div>
+
+            {/* Importing / Finalizing Status */}
+            {uploadState === 'importing' && !parseWarning && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center gap-10"
+              >
+                <div className="relative group">
+                  <div className="w-24 h-24 rounded-full border border-white/5" />
+                  <div className="absolute inset-0 w-24 h-24 rounded-full border-t-2 border-brand-green animate-spin shadow-[0_0_20px_rgba(0,229,160,0.4)]" />
+                  <div className="absolute inset-3 w-18 h-18 rounded-full border-r-2 border-brand-green/30 animate-spin-slow opacity-40" />
+                  <div className="absolute inset-0 bg-brand-green/5 blur-2xl rounded-full scale-150 animate-pulse" />
+                </div>
+                
+                <div className="flex flex-col items-center gap-4 text-center">
+                  <h3 className="text-3xl font-display italic text-white tracking-tight">Almost there</h3>
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-[#6B7394] text-[11px] font-mono uppercase tracking-[0.4em] font-bold">
+                      {transactions.length > 0 
+                        ? `Importing ${transactions.length} records` 
+                        : 'Finalizing workspace sync'}
+                    </p>
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-brand-green/5 border border-brand-green/10">
+                      <div className="w-1 h-1 rounded-full bg-brand-green animate-pulse" />
+                      <p className="text-[9px] text-brand-green/80 font-mono uppercase tracking-widest font-bold">
+                        AI Categorization active
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

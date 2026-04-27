@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import SiteFooter from '@/components/layout/SiteFooter'
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -47,10 +48,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </div>
 
       {/* Right Panel - Form Container */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-surface">
-        <div className="w-full max-w-md">
-          {children}
+      <div className="flex-1 flex flex-col bg-surface min-h-screen">
+        <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
+          <div className="w-full max-w-md">
+            {children}
+          </div>
         </div>
+        <SiteFooter />
       </div>
     </div>
   )

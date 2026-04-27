@@ -160,16 +160,17 @@ export default function SignupPage() {
           />
         </div>
 
-        <div className="flex items-start gap-2 mt-2">
+        <div className="flex items-start gap-3 mt-4 bg-white/[0.02] border border-white/5 rounded-lg p-3">
           <input 
             type="checkbox"
             id="terms"
+            required
             checked={termsAccepted}
             onChange={e => setTermsAccepted(e.target.checked)}
-            className="mt-1 bg-surface2 border-border rounded text-brand-green focus:ring-brand-green/50"
+            className="mt-1 w-4 h-4 bg-[#1a1d24] border-white/10 rounded text-brand-green focus:ring-brand-green/30 cursor-pointer"
           />
-          <label htmlFor="terms" className="text-xs font-mono text-text-muted leading-relaxed">
-            I agree to the <Link href="/terms" className="text-brand-green hover:underline">Terms of Service</Link> and <Link href="/privacy" className="text-brand-green hover:underline">Privacy Policy</Link>.
+          <label htmlFor="terms" className="text-[11px] font-mono text-[#6B7394] leading-relaxed cursor-pointer select-none">
+            I have read and agree to the <Link href="/terms" className="text-brand-green hover:text-brand-green/80 transition-colors">Terms of Service</Link> and <Link href="/privacy" className="text-brand-green hover:text-brand-green/80 transition-colors">Privacy Policy</Link>, including the AI processing of my transaction data.
           </label>
         </div>
 

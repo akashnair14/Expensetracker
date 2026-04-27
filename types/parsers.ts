@@ -6,9 +6,16 @@ export interface ParsedTransaction {
   balance?: number      // running balance if available
 }
 
+export interface ParseResult {
+  transactions: ParsedTransaction[]
+  accountNumber?: string
+  accountHolder?: string
+  bankName?: string
+}
+
 export interface BankParser {
   bankName: string
   supportedFormats: ('pdf' | 'csv' | 'xlsx')[]
-  parse(buffer: ArrayBuffer, fileName: string): Promise<ParsedTransaction[]>
+  parse(buffer: ArrayBuffer, fileName: string): Promise<ParseResult>
   detectFormat(fileName: string, firstBytes: Uint8Array): boolean
 }

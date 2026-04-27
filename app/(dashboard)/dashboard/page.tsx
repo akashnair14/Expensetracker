@@ -8,6 +8,14 @@ import { format } from 'date-fns'
 import { createClient } from '@/lib/db/client'
 import { Skeleton } from '@/components/ui/skeleton'
 import Link from 'next/link'
+// import { Transaction } from '@/types'
+
+interface BarDataPoint {
+  month: string;
+  Income: number;
+  Expense: number;
+  rawDate: Date;
+}
 
 // Simple count up effect
 function CountUp({ value, prefix = "", suffix = "", decimals = 0 }: { value: number, prefix?: string, suffix?: string, decimals?: number }) {
@@ -41,7 +49,13 @@ const CATEGORY_COLORS = ['#00E5A0', '#4D9FFF', '#FF8C42', '#A78BFA', '#F472B6', 
 export default function DashboardPage() {
   const supabase = createClient()
   const [user, setUser] = useState<import('@supabase/supabase-js').User | null>(null)
+  const [mounted, setMounted] = useState(false)
   const now = new Date()
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 100)
+    return () => clearTimeout(timer)
+  }, [])
   const [dateRange, setDateRange] = useState<'month' | '3months' | '6months' | 'all'>('all')
 
   const getDateRange = () => {
@@ -61,7 +75,6 @@ export default function DashboardPage() {
   }
 
   const { start: startDate, end: endDate } = getDateRange()
-  const currentMonthStr = `${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()}`
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
@@ -120,9 +133,22 @@ export default function DashboardPage() {
   })) || []
 
   // Add empty bar data placeholder if not enough data
-  const barData = txData?.transactions ? [
-    { month: currentMonthStr.split(' ')[0], Income: totalIncome, Expense: totalSpent }
-  ] : []
+  // Group daily stats into monthly bars
+  const barData = txData?.dailyStats ? Object.entries(txData.dailyStats as Record<string, { income: number, expense: number }>)
+    .reduce((acc: BarDataPoint[], [date, stats]) => {
+      const monthYear = format(new Date(date), 'MMM yyyy')
+      const existing = acc.find(b => b.month === monthYear)
+      if (existing) {
+        existing.Income += stats.income
+        existing.Expense += stats.expense
+      } else {
+        acc.push({ month: monthYear, Income: stats.income, Expense: stats.expense, rawDate: new Date(date) })
+      }
+      return acc
+    }, [])
+    .sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime())
+    .map(({ month, Income, Expense }) => ({ month, Income, Expense }))
+    : []
 
 
   return (
@@ -241,21 +267,23 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-6">
-              <div className="h-[200px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value" stroke="none">
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} className="hover:opacity-80 transition-opacity cursor-pointer" />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#141720', borderColor: '#252A3A', borderRadius: '8px', color: '#fff', fontFamily: 'DM Mono' }}
-                      itemStyle={{ color: '#fff' }}
-                      formatter={(value: unknown) => [`₹${Number(value).toLocaleString()}`, 'Amount']}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="h-[200px] w-full min-h-[200px] relative">
+                {mounted && (
+                  <ResponsiveContainer id="dashboard-pie-chart" width="100%" height="100%" debounce={1}>
+                    <PieChart>
+                      <Pie data={pieData} innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value" stroke="none">
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} className="hover:opacity-80 transition-opacity cursor-pointer" />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#141720', borderColor: '#252A3A', borderRadius: '8px', color: '#fff', fontFamily: 'DM Mono' }}
+                        itemStyle={{ color: '#fff' }}
+                        formatter={(value: unknown) => [`₹${Number(value).toLocaleString()}`, 'Amount']}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
               </div>
               <div className="flex flex-col gap-3">
                 {pieData.map((item, i) => (
@@ -282,21 +310,23 @@ export default function DashboardPage() {
               <Skeleton className="w-full h-full" />
             </div>
           ) : (
-            <div className="h-[300px] w-full mt-auto">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#252A3A" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#6B7394', fontSize: 12, fontFamily: 'DM Mono' }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7394', fontSize: 12, fontFamily: 'DM Mono' }} tickFormatter={(val) => `₹${val/1000}k`} />
-                  <Tooltip 
-                    cursor={{ fill: '#1C2030' }}
-                    contentStyle={{ backgroundColor: '#141720', borderColor: '#252A3A', borderRadius: '8px', color: '#fff', fontFamily: 'DM Mono' }}
-                  />
-                  <Legend iconType="circle" wrapperStyle={{ fontFamily: 'DM Mono', fontSize: '12px', paddingTop: '20px' }} />
-                  <Bar dataKey="Income" fill="rgba(0, 229, 160, 0.6)" radius={[4, 4, 0, 0]} animationBegin={0} animationDuration={1200} />
-                  <Bar dataKey="Expense" fill="#4D9FFF" radius={[4, 4, 0, 0]} animationBegin={0} animationDuration={1200} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="h-[300px] w-full mt-auto min-h-[300px] relative">
+              {mounted && (
+                <ResponsiveContainer id="dashboard-bar-chart" width="100%" height="100%" debounce={1}>
+                  <BarChart data={barData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#252A3A" />
+                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#6B7394', fontSize: 12, fontFamily: 'DM Mono' }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7394', fontSize: 12, fontFamily: 'DM Mono' }} tickFormatter={(val) => `₹${val/1000}k`} />
+                    <Tooltip 
+                      cursor={{ fill: '#1C2030' }}
+                      contentStyle={{ backgroundColor: '#141720', borderColor: '#252A3A', borderRadius: '8px', color: '#fff', fontFamily: 'DM Mono' }}
+                    />
+                    <Legend iconType="circle" wrapperStyle={{ fontFamily: 'DM Mono', fontSize: '12px', paddingTop: '20px' }} />
+                    <Bar dataKey="Income" fill="rgba(0, 229, 160, 0.6)" radius={[4, 4, 0, 0]} animationBegin={0} animationDuration={1200} />
+                    <Bar dataKey="Expense" fill="#4D9FFF" radius={[4, 4, 0, 0]} animationBegin={0} animationDuration={1200} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           )}
         </div>

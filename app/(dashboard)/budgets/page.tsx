@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Target, Plus, Edit2, 
@@ -67,6 +67,12 @@ export default function BudgetsPage() {
   const queryClient = useQueryClient()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null)
+  const [mounted, setMounted] = useState(false)
+  
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 100)
+    return () => clearTimeout(timer)
+  }, [])
   
   const currentMonthStr = format(new Date(), 'yyyy-MM')
   
@@ -272,12 +278,14 @@ export default function BudgetsPage() {
                     </span>
                     
                     {/* Tiny Sparkline */}
-                    <div className="h-[30px] w-24">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={sparklineData}>
-                          <Line type="monotone" dataKey="amount" stroke={isOver ? '#FF5C7A' : 'var(--brand-green)'} strokeWidth={2} dot={false} />
-                        </LineChart>
-                      </ResponsiveContainer>
+                    <div className="h-[30px] w-24 min-h-[30px]">
+                      {mounted && (
+                        <ResponsiveContainer width="100%" height="100%" debounce={1}>
+                          <LineChart data={sparklineData}>
+                            <Line type="monotone" dataKey="amount" stroke={isOver ? '#FF5C7A' : 'var(--brand-green)'} strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </div>
 
