@@ -17,110 +17,163 @@ export const axisParser: BankParser = {
       const pdf = await loadingTask.promise
       const transactions: ParsedTransaction[] = []
       let accountNumber = ''
+      let lastBalance: number | undefined = undefined;
+
+      let debitX: number | undefined
+      let creditX: number | undefined
+      let balanceX: number | undefined
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         const page = await pdf.getPage(pageNum)
         const textContent = await page.getTextContent()
         const items = textContent.items as Array<{ str: string; transform: number[] }>
 
+        // Find headers on each page (sometimes layout shifts slightly)
+        for (const item of items) {
+          const text = item.str.trim().toLowerCase()
+          const x = item.transform[4]
+          
+          if (text.includes('debit') || text.includes('withdrawal') || text.includes('amt(dr)')) {
+            debitX = x
+          } else if (text.includes('credit') || text.includes('deposit') || text.includes('amt(cr)')) {
+            creditX = x
+          } else if (text.includes('balance')) {
+            balanceX = x
+          }
+        }
+
         // Group items into lines by their Y coordinate (rounded to nearest 2px)
-        const linesMap: Record<number, Array<{ str: string; transform: number[] }>> = {}
+        const linesMap: Record<number, Array<{ str: string; transform: number[]; x: number }>> = {}
         for (const item of items) {
           const y = Math.round(item.transform[5] / 2) * 2
           if (!linesMap[y]) linesMap[y] = []
-          linesMap[y].push(item)
+          linesMap[y].push({ ...item, x: item.transform[4] })
         }
 
-        // Sort lines top-to-bottom (PDF Y is bottom-up, so highest Y = top of page)
+        // Sort lines top-to-bottom
         const sortedYs = Object.keys(linesMap)
           .map(Number)
           .sort((a, b) => b - a)
 
-        for (const y of sortedYs) {
-          const lineItems = linesMap[y].sort((a, b) => a.transform[4] - b.transform[4])
+        for (let i = 0; i < sortedYs.length; i++) {
+          const y = sortedYs[i]
+          const lineItems = linesMap[y].sort((a, b) => a.x - b.x)
           const lineText = lineItems.map((item) => item.str).join(' ').replace(/\s+/g, ' ').trim()
+
+          if (!lineText || lineText.length < 5) continue
 
           // Account number extraction
           if (pageNum === 1 && !accountNumber) {
             const accMatch = lineText.match(/Account No\s*:\s*(\d+)/i) || 
                             lineText.match(/A\/C No\s*:\s*(\d+)/i) ||
-                            lineText.match(/Customer ID\s*:\s*(\d+)/i) // Fallback for Axis
+                            lineText.match(/Customer ID\s*:\s*(\d+)/i)
             if (accMatch) accountNumber = accMatch[1].slice(-4)
           }
 
-          // Skip empty lines and headers
-          if (!lineText || lineText.length < 5) continue
-
-          // Axis Bank date formats: DD-MM-YYYY or DD/MM/YYYY
-          const dateMatch = lineText.match(/^(\d{2}[-/]\d{2}[-/]\d{4})/)
-          if (!dateMatch) continue
-
-          const rawDate = dateMatch[1]
-          const sep = rawDate.includes('-') ? '-' : '/'
-          const [dd, mm, yyyy] = rawDate.split(sep)
-          const dateIso = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
-
-          // Extract all numbers from the line (skip the date itself)
-          const restOfLine = lineText.slice(dateMatch[0].length).trim()
-          
-          // Find all currency amounts (numbers with optional commas and decimals)
-          const amounts = Array.from(restOfLine.matchAll(/(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g))
-            .map(m => parseFloat(m[1].replace(/,/g, '')))
-            .filter(n => !isNaN(n) && n > 0)
-
-          if (amounts.length === 0) continue
-
-          // Extract description: text between date and first number
-          const firstNumIdx = restOfLine.search(/\d{1,3}(?:,\d{3})*(?:\.\d{2})?/)
-          const description = firstNumIdx > 0
-            ? restOfLine.slice(0, firstNumIdx).trim()
-            : restOfLine.replace(/[\d,\.]+/g, ' ').trim()
-
-          // Axis format: Description | Debit | Credit | Balance
-          // If 3+ numbers: [debit or credit, balance] or [debit, credit, balance]
-          let amount = 0
-          let is_debit = false
-          let balance: number | undefined
-
-          if (amounts.length >= 3) {
-            // [chq/ref?, debit, credit, balance] - take last 3
-            const last3 = amounts.slice(-3)
-            const debitAmt = last3[0]
-            const creditAmt = last3[1]
-            balance = last3[2]
-            if (debitAmt > 0 && creditAmt === 0) {
-              amount = debitAmt; is_debit = true
-            } else if (creditAmt > 0 && debitAmt === 0) {
-              amount = creditAmt; is_debit = false
-            } else {
-              // Fallback: use first nonzero as debit
-              amount = debitAmt || creditAmt
-              is_debit = !!debitAmt
-            }
-          } else if (amounts.length === 2) {
-            // [txn_amount, balance]
-            amount = amounts[0]
-            balance = amounts[1]
-            // Determine debit/credit from context keywords
-            const lower = restOfLine.toLowerCase()
-            is_debit = !lower.includes('credit') && !lower.includes('cr ')
-          } else {
-            // Single amount
-            amount = amounts[0]
-            const lower = restOfLine.toLowerCase()
-            is_debit = !lower.includes('cr') && !lower.includes('credit')
+          // Detect opening balance
+          if (lineText.toUpperCase().includes('OPENING BALANCE')) {
+             const nums = Array.from(lineText.matchAll(/(?:\s|^)(\d{1,3}(?:,\d{3})*\.\d{2})(?=\s|$)/g))
+                .map(m => parseFloat(m[1].replace(/,/g, '')))
+             if (nums.length > 0) {
+                lastBalance = nums[nums.length - 1]
+             }
+             continue
           }
 
-          if (amount > 0) {
-            const finalDescription = description || `Transaction on ${dateIso}`
+          const dateMatch = lineText.match(/^(\d{2}[-/]\d{2}[-/](?:\d{4}|\d{2}))(?=\s|$)/)
+          
+          if (dateMatch) {
+            const rawDate = dateMatch[1]
+            const sep = rawDate.includes('-') ? '-' : '/'
+            const [dd, mm, yyRaw] = rawDate.split(sep)
+            const yy = yyRaw.length === 2 ? `20${yyRaw}` : yyRaw
+            const dateIso = `${yy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
 
-            transactions.push({
-              date: dateIso,
-              amount: Math.abs(amount),
-              description: finalDescription,
-              is_debit,
-              balance
+            // Extract amount items
+            const amountItems = lineItems.filter(item => {
+              const str = item.str.trim().replace(/,/g, '')
+              return /^\d+\.\d{2}$/.test(str) && parseFloat(str) > 0
             })
+
+            // Initial description from the same line
+            const firstAmountX = amountItems.length > 0 ? amountItems[0].x : 9999
+            let description = lineItems
+              .filter(item => item.x < firstAmountX && item.x > 80) // Skip date column
+              .map(item => item.str)
+              .join(' ')
+              .trim()
+
+            // Look ahead for multi-line description
+            let j = i + 1
+            while (j < sortedYs.length) {
+              const nextLineItems = linesMap[sortedYs[j]].sort((a, b) => a.x - b.x)
+              const nextLineText = nextLineItems.map(item => item.str).join(' ').trim()
+              
+              // If next line has a date or any amount, it's a new transaction
+              const hasDate = nextLineText.match(/^(\d{2}[-/]\d{2}[-/](?:\d{4}|\d{2}))/)
+              const hasAmount = nextLineItems.some(item => {
+                const s = item.str.trim().replace(/,/g, '')
+                return /^\d+\.\d{2}$/.test(s) && parseFloat(s) > 0
+              })
+
+              if (hasDate || hasAmount || nextLineText.toUpperCase().includes('TOTAL') || nextLineText.toUpperCase().includes('BALANCE')) break
+
+              // Append to description if it falls within the description column range
+              const extraDesc = nextLineItems
+                .filter(item => item.x < firstAmountX && item.x > 80)
+                .map(item => item.str)
+                .join(' ')
+                .trim()
+              
+              if (extraDesc) {
+                description += ' ' + extraDesc
+              }
+              j++
+            }
+
+            let amount = 0
+            let is_debit = false
+            let balance: number | undefined
+
+            if (amountItems.length > 0) {
+              if (debitX !== undefined && creditX !== undefined) {
+                const tolerance = 25
+                const debitItem = amountItems.find(item => Math.abs(item.x - debitX!) < tolerance)
+                const creditItem = amountItems.find(item => Math.abs(item.x - creditX!) < tolerance)
+                const balanceItem = amountItems.find(item => Math.abs(item.x - (balanceX || 9999)) < tolerance) || amountItems[amountItems.length - 1]
+
+                if (debitItem) {
+                  amount = parseFloat(debitItem.str.replace(/,/g, ''))
+                  is_debit = true
+                } else if (creditItem) {
+                  amount = parseFloat(creditItem.str.replace(/,/g, ''))
+                  is_debit = false
+                }
+                if (balanceItem) balance = parseFloat(balanceItem.str.replace(/,/g, ''))
+              }
+
+              // Mathematical fallback
+              if (amount === 0 && amountItems.length >= 2) {
+                amount = parseFloat(amountItems[0].str.replace(/,/g, ''))
+                balance = parseFloat(amountItems[amountItems.length - 1].str.replace(/,/g, ''))
+                if (lastBalance !== undefined) {
+                  if (Math.abs(lastBalance - amount - balance) < 0.1) is_debit = true
+                  else if (Math.abs(lastBalance + amount - balance) < 0.1) is_debit = false
+                }
+              }
+
+              if (balance !== undefined) lastBalance = balance
+
+              if (amount > 0) {
+                transactions.push({
+                  date: dateIso,
+                  amount,
+                  description: description.replace(/\s+/g, ' ').trim(),
+                  is_debit,
+                  balance
+                })
+              }
+            }
           }
         }
       }

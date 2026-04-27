@@ -58,11 +58,11 @@ async function parsePdf(buffer: ArrayBuffer): Promise<ParseResult> {
           continue
         }
 
-        // ICICI PDF Date format: DD.MM.YYYY
-        const dateMatch = lineText.match(/^(\d{2}\.\d{2}\.\d{4})/)
+        // ICICI PDF Date format: DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY
+        const dateMatch = lineText.match(/^(\d{2}[\.\-\/]\d{2}[\.\-\/]\d{4})/)
         if (dateMatch) {
           const dateStr = dateMatch[1]
-          const [dd, mm, yyyy] = dateStr.split('.')
+          const [dd, mm, yyyy] = dateStr.split(/[\.\-\/]/)
           const dateIso = `${yyyy}-${mm}-${dd}`
           
           let amount = 0
@@ -78,7 +78,7 @@ async function parsePdf(buffer: ArrayBuffer): Promise<ParseResult> {
               // Remarks column
               if (remarksX && Math.abs(x - remarksX) < 100) {
                 description += ' ' + item.str
-              } else if (!remarksX && x > 150 && x < 400) {
+              } else if (!remarksX && x > 150 && x < Math.min(withdrawalX || 550, depositX || 550)) {
                  description += ' ' + item.str
               }
             } else {

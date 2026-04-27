@@ -4,6 +4,7 @@ import { parseStatement } from '@/lib/parsers'
 import { assertCanUpload, SubscriptionLimitError } from '@/lib/subscription/gate'
 import { MerchantContext } from '@/lib/ai/categorize'
 import { ParsedTransaction } from '@/types/parsers'
+import { parseIndianNarration } from '@/lib/parsers/utils'
 
 export async function POST(request: Request) {
   try {
@@ -100,40 +101,27 @@ export async function POST(request: Request) {
 
     const merchantsToCategorize: MerchantContext[] = []
     const transactions = rawTransactions.map((t: ParsedTransaction) => {
-      let merchant = 'UNKNOWN'
-      const desc = t.description.toUpperCase()
-      
-      // Improved merchant extraction
-      if (desc.includes('UPI') || desc.includes('IMPS') || desc.includes('NEFT') || desc.includes('RTGS')) {
-        const parts = desc.split(/[\/\-\s]+/).filter(p => p.length > 2 && !/^\d+$/.test(p))
-        const filtered = parts.filter(p => !['UPI', 'P2M', 'P2P', 'IMPS', 'NEFT', 'RTGS', 'CR', 'DR', 'TRANSFER', 'ONLINE', 'MOBILE', 'BANK', 'PAID', 'REFV', 'REF', 'TRF', 'SETTLEMENT'].includes(p))
-        merchant = filtered.slice(0, 4).join(' ') || parts.slice(0, 3).join(' ') || 'UNKNOWN'
-      } else {
-        const cleaned = t.description
-          .replace(/[^\w\s\-\/]/g, ' ')
-          .replace(/\d{8,}/g, ' ') // Only remove very long IDs
-          .trim()
-          .split(/\s+/)
-          .filter(w => w.length > 2)
-          .slice(0, 4)
-          .join(' ')
-          .toUpperCase()
-        merchant = cleaned || 'UNKNOWN'
-      }
+      // Use the strict 8-step parsing engine for Indian narrations
+      const parsed = parseIndianNarration(t.description)
+      const merchant = parsed.merchant_clean
       
       // Add to categorization queue
       merchantsToCategorize.push({
         merchant,
         description: t.description,
-        amount: Number(t.amount)
+        amount: Number(t.amount),
+        isDebit: t.is_debit,
+        category: parsed.category // Pass suggested category from utility
       })
 
       return {
         id: crypto.randomUUID(),
         ...t,
         merchant,
+        category: parsed.category, // Set initial category
         user_id: user.id,
-        account_id: accountId
+        account_id: accountId,
+        upload_id: undefined 
       }
     })
     
@@ -151,10 +139,30 @@ export async function POST(request: Request) {
       uncachedMerchants.push(...uniqueContexts.filter(m => !cachedSet.has(m.merchant.substring(0, 50))))
     }
 
+    const { data: uploadRecord, error: uploadUsageError } = await supabase.from('upload_usage').insert({
+      user_id: user.id,
+      file_name: file.name,
+      transaction_count: transactions.length,
+      account_id: accountId,
+      storage_path: filePath
+    }).select('id').single()
+
+    if (uploadUsageError) {
+      console.error('Upload usage record error:', uploadUsageError)
+    }
+
+    const uploadId = uploadRecord?.id
+
+    // Update transactions with the real uploadId before saving to temp
+    const transactionsWithUploadId = transactions.map(tx => ({
+      ...tx,
+      upload_id: uploadId
+    }))
+
     const tempPath = `${user.id}/temp/${jobId}.json`
     const { error: tempError } = await supabase.storage
       .from('statements')
-      .upload(tempPath, JSON.stringify(transactions), {
+      .upload(tempPath, JSON.stringify(transactionsWithUploadId), {
         contentType: 'application/json'
       })
 
@@ -162,12 +170,6 @@ export async function POST(request: Request) {
       console.error('Temp storage upload error:', tempError as { message: string })
       throw new Error(`Failed to save temporary data: ${tempError.message}`)
     }
-
-    await supabase.from('upload_usage').insert({
-      user_id: user.id,
-      file_name: file.name,
-      transaction_count: transactions.length
-    })
 
     return NextResponse.json({ 
       jobId, 

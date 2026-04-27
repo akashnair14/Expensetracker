@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/db/client'
 import { 
   LayoutDashboard, ArrowLeftRight, BarChart3, Target, 
-  Upload, FileText, RefreshCw, Star, Settings, Menu, X, LogOut, ChevronDown, Zap 
+  Upload, FileText, RefreshCw, Star, Settings, Menu, X, LogOut, ChevronDown, Zap, Database
 } from 'lucide-react'
 import { useSubscription } from '@/hooks/useSubscription'
 import PlanBadge from '@/components/subscription/PlanBadge'
@@ -18,6 +18,7 @@ const navLinks = [
   { name: 'Budgets', href: '/budgets', icon: Target },
   { name: 'Upload Statement', href: '/upload', icon: Upload },
   { name: 'Reports', href: '/reports', icon: FileText },
+  { name: 'Documents', href: '/documents', icon: Database },
   { name: 'Subscriptions', href: '/subscriptions', icon: RefreshCw },
   { name: 'Goals', href: '/goals', icon: Star },
   { name: 'Pricing', href: '/pricing', icon: Zap, color: 'text-brand-green' },

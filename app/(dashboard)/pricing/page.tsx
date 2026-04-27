@@ -33,6 +33,10 @@ export default function PricingPage() {
     }
   }
 
+  const isYearlySubscribed = subscription?.plan === 'pro_annual'
+  const isMonthlySubscribed = subscription?.plan === 'pro_monthly'
+  const isFree = !subscription || subscription?.plan === 'free'
+
   const proPlan = billingCycle === 'monthly' ? PLANS.pro_monthly : PLANS.pro_annual
 
   return (
@@ -61,140 +65,179 @@ export default function PricingPage() {
             Start free. Upgrade when you&apos;re ready. Cancel anytime.
           </p>
 
-          {/* Billing Toggle */}
-          <div className="flex items-center justify-center gap-4">
-            <span className={`text-xs font-mono transition-colors ${billingCycle === 'monthly' ? 'text-white' : 'text-text-muted'}`}>Monthly</span>
-            <button 
-              onClick={() => setBillingCycle(prev => prev === 'monthly' ? 'yearly' : 'monthly')}
-              className="w-12 h-6 rounded-full bg-surface2 border border-border p-1 relative transition-colors hover:border-brand-green/50"
-            >
-              <motion.div 
-                animate={{ x: billingCycle === 'monthly' ? 0 : 24 }}
-                className="w-4 h-4 rounded-full bg-brand-green shadow-[0_0_10px_rgba(0,229,160,0.4)]"
-              />
-            </button>
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-mono transition-colors ${billingCycle === 'yearly' ? 'text-white' : 'text-text-muted'}`}>Yearly</span>
-              <span className="bg-brand-green/20 text-brand-green text-[10px] px-2 py-0.5 rounded font-bold border border-brand-green/30">SAVE 15%</span>
+          {/* Billing Toggle (Only for free users) */}
+          {isFree && (
+            <div className="flex items-center justify-center gap-4">
+              <span className={`text-xs font-mono transition-colors ${billingCycle === 'monthly' ? 'text-white' : 'text-text-muted'}`}>Monthly</span>
+              <button 
+                onClick={() => setBillingCycle(prev => prev === 'monthly' ? 'yearly' : 'monthly')}
+                className="w-12 h-6 rounded-full bg-surface2 border border-border p-1 relative transition-colors hover:border-brand-green/50"
+              >
+                <motion.div 
+                  animate={{ x: billingCycle === 'monthly' ? 0 : 24 }}
+                  className="w-4 h-4 rounded-full bg-brand-green shadow-[0_0_10px_rgba(0,229,160,0.4)]"
+                />
+              </button>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-mono transition-colors ${billingCycle === 'yearly' ? 'text-white' : 'text-text-muted'}`}>Yearly</span>
+                <span className="bg-brand-green/20 text-brand-green text-[10px] px-2 py-0.5 rounded font-bold border border-brand-green/30">SAVE 15%</span>
+              </div>
             </div>
-          </div>
+          )}
         </motion.div>
 
-        {/* Pricing Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full mb-20">
-          {/* Free Card */}
+        {isYearlySubscribed && (
           <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className={`bg-[#141720] border rounded-2xl p-8 flex flex-col relative ${
-              subscription?.plan === 'free' ? 'border-brand-green/50 ring-1 ring-brand-green/30' : 'border-[#252A3A]'
-            }`}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full max-w-2xl mx-auto mb-20 bg-[#141720] border-2 border-brand-green rounded-2xl p-8 flex flex-col items-center text-center shadow-[0_0_40px_rgba(0,229,160,0.08)]"
           >
-            {subscription?.plan === 'free' && (
+             <div className="w-16 h-16 bg-brand-green/10 rounded-full flex items-center justify-center mb-6">
+                <Check className="w-8 h-8 text-brand-green" />
+             </div>
+             <h2 className="text-2xl font-display mb-2">Pro Annual Active</h2>
+             <p className="text-text-muted font-mono mb-8">You have full access to all premium features until your next billing date.</p>
+             <button disabled className="px-8 py-3 bg-brand-green/10 text-brand-green border border-brand-green/20 rounded-xl font-ui font-bold text-sm cursor-default">
+               Currently Subscribed
+             </button>
+          </motion.div>
+        )}
+
+        {isMonthlySubscribed && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full max-w-2xl mx-auto mb-20 bg-[#141720] border border-[#252A3A] rounded-2xl p-8 flex flex-col relative overflow-hidden"
+          >
+             <div className="absolute top-0 right-0 bg-brand-green text-[#0D0F14] text-[11px] font-bold px-4 py-1 rounded-bl-xl">
+               UPGRADE OPPORTUNITY
+             </div>
+             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-8 mb-8 mt-2">
+               <div>
+                 <h2 className="text-2xl font-display mb-2">Pro Monthly Active</h2>
+                 <p className="text-text-muted font-mono text-sm max-w-sm">You are currently on the monthly plan. Upgrade to the annual plan to save 15%.</p>
+               </div>
+               <div className="flex flex-col items-start md:items-end">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-display">₹799</span>
+                    <span className="text-sm font-mono text-text-muted">/year</span>
+                  </div>
+                  <span className="text-xs font-mono text-brand-green mt-1">Save ₹29/month equivalent</span>
+               </div>
+             </div>
+             
+             <button 
+               onClick={() => handleUpgrade(PLANS.pro_annual.id)}
+               disabled={isUpgrading === PLANS.pro_annual.id}
+               className="w-full py-4 rounded-xl font-ui font-bold text-sm transition-all shadow-lg shadow-brand-green/20 bg-brand-green text-[#0D0F14] hover:bg-brand-green/90"
+             >
+               {isUpgrading === PLANS.pro_annual.id ? 'Processing...' : 'Upgrade to Annual Plan (Save 15%)'}
+             </button>
+          </motion.div>
+        )}
+
+        {isFree && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full mb-20">
+            {/* Free Card */}
+            <motion.div 
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-[#141720] border border-brand-green/50 ring-1 ring-brand-green/30 rounded-2xl p-8 flex flex-col relative"
+            >
               <div className="absolute -top-3 left-8 bg-[#252A3A] border border-border text-[10px] font-mono px-3 py-1 rounded-full text-white">
                 YOUR CURRENT PLAN
               </div>
-            )}
-            <div className="mb-8">
-              <h3 className="text-[12px] font-display uppercase tracking-widest text-text-muted mb-4">Free</h3>
-              <div className="flex items-baseline gap-1">
-                <span className="text-5xl font-display">₹0</span>
-                <span className="text-sm font-mono text-text-muted">/forever</span>
-              </div>
-            </div>
-
-            <div className="flex-1 flex flex-col gap-4 mb-8">
-              <FeatureItem icon={Check} text="5 statement uploads (lifetime)" />
-              <FeatureItem icon={Check} text="AI auto-categorization" />
-              <FeatureItem icon={Check} text="Basic dashboard & charts" />
-              <FeatureItem icon={Check} text="1 bank account" />
-              <FeatureItem icon={Check} text="3 AI queries per day" />
-              <FeatureItem icon={X} text="AI monthly reports" muted />
-              <FeatureItem icon={X} text="Advanced analytics" muted />
-              <FeatureItem icon={X} text="CSV & PDF export" muted />
-              <FeatureItem icon={X} text="Multiple accounts" muted />
-            </div>
-
-            <button 
-              disabled={subscription?.plan === 'free'}
-              className={`w-full py-3.5 rounded-xl font-ui text-sm transition-all border ${
-                subscription?.plan === 'free' 
-                  ? 'bg-transparent border-border text-text-muted cursor-default' 
-                  : 'bg-[#1C2030] border-border hover:border-brand-green/40 text-white'
-              }`}
-            >
-              {subscription?.plan === 'free' ? 'Current Plan' : 'Get Started Free'}
-            </button>
-            <p className="text-center text-[10px] font-mono text-text-muted mt-4">No credit card required</p>
-          </motion.div>
-
-          {/* Pro Card */}
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className={`bg-[#141720] border-2 rounded-2xl p-8 flex flex-col relative shadow-[0_0_40px_rgba(0,229,160,0.08)] ${
-              isProPlan(subscription?.plan) ? 'border-brand-green' : 'border-brand-green'
-            }`}
-          >
-            <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-brand-green text-[#0D0F14] text-[11px] font-bold px-4 py-1 rounded-full whitespace-nowrap">
-              {billingCycle === 'monthly' ? 'MOST POPULAR' : 'BEST VALUE'}
-            </div>
-
-            <div className="mb-8">
-              <h3 className="text-[12px] font-display uppercase tracking-widest text-brand-green mb-4">Pro</h3>
-              <div className="flex flex-col gap-1">
+              <div className="mb-8">
+                <h3 className="text-[12px] font-display uppercase tracking-widest text-text-muted mb-4">Free</h3>
                 <div className="flex items-baseline gap-1">
-                  <AnimatePresence mode="wait">
-                    <motion.span 
-                      key={billingCycle}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="text-5xl font-display"
-                    >
-                      ₹{billingCycle === 'monthly' ? '69' : '799'}
-                    </motion.span>
-                  </AnimatePresence>
-                  <span className="text-sm font-mono text-text-muted">/{billingCycle === 'monthly' ? 'month' : 'year'}</span>
+                  <span className="text-5xl font-display">₹0</span>
+                  <span className="text-sm font-mono text-text-muted">/forever</span>
                 </div>
-                {billingCycle === 'yearly' && (
-                  <div className="flex flex-col gap-1 mt-2">
-                    <span className="text-xs font-mono text-brand-green">₹66/mo equivalent</span>
-                    <span className="inline-block bg-brand-green/10 border border-brand-green/20 text-[10px] text-brand-green px-2 py-1 rounded w-fit font-bold">
-                      2 months free · Save ₹29/mo
-                    </span>
-                  </div>
-                )}
               </div>
-            </div>
 
-            <div className="flex-1 flex flex-col gap-4 mb-8">
-              <FeatureItem icon={Check} text="Unlimited statement uploads" color="text-brand-green" />
-              <FeatureItem icon={Check} text="AI auto-categorization" color="text-brand-green" />
-              <FeatureItem icon={Check} text="Full analytics suite (8 charts)" color="text-brand-green" />
-              <FeatureItem icon={Check} text="Unlimited bank accounts" color="text-brand-green" />
-              <FeatureItem icon={Check} text="Unlimited AI queries" color="text-brand-green" />
-              <FeatureItem icon={Check} text="AI monthly reports & insights" color="text-brand-green" />
-              <FeatureItem icon={Check} text="CSV & PDF export" color="text-brand-green" />
-              <FeatureItem icon={Check} text="Anomaly detection & alerts" color="text-brand-green" />
-              <FeatureItem icon={Check} text="Subscription tracker" color="text-brand-green" />
-              <FeatureItem icon={Check} text="Priority support" color="text-brand-green" />
-            </div>
+              <div className="flex-1 flex flex-col gap-4 mb-8">
+                <FeatureItem icon={Check} text="5 statement uploads (lifetime)" />
+                <FeatureItem icon={Check} text="AI auto-categorization" />
+                <FeatureItem icon={Check} text="Basic dashboard & charts" />
+                <FeatureItem icon={Check} text="1 bank account" />
+                <FeatureItem icon={Check} text="3 AI queries per day" />
+                <FeatureItem icon={X} text="AI monthly reports" muted />
+                <FeatureItem icon={X} text="Advanced analytics" muted />
+                <FeatureItem icon={X} text="CSV & PDF export" muted />
+                <FeatureItem icon={X} text="Multiple accounts" muted />
+              </div>
 
-            <button 
-              onClick={() => handleUpgrade(proPlan.id)}
-              disabled={subscription?.plan === proPlan.id || isUpgrading === proPlan.id}
-              className={`w-full py-4 rounded-xl font-ui font-bold text-sm transition-all shadow-lg shadow-brand-green/20 ${
-                subscription?.plan === proPlan.id
-                  ? 'bg-transparent border border-brand-green text-brand-green cursor-default'
-                  : 'bg-brand-green text-[#0D0F14] hover:bg-brand-green/90 active:scale-[0.98]'
-              }`}
+              <button 
+                disabled
+                className="w-full py-3.5 rounded-xl font-ui text-sm transition-all border bg-transparent border-border text-text-muted cursor-default"
+              >
+                Current Plan
+              </button>
+              <p className="text-center text-[10px] font-mono text-text-muted mt-4">No credit card required</p>
+            </motion.div>
+
+            {/* Pro Card */}
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-[#141720] border-2 border-brand-green rounded-2xl p-8 flex flex-col relative shadow-[0_0_40px_rgba(0,229,160,0.08)]"
             >
-              {subscription?.plan === proPlan.id ? 'Current Plan' : isUpgrading === proPlan.id ? 'Processing...' : `Upgrade to Pro`}
-            </button>
-            <p className="text-center text-[10px] font-mono text-text-muted mt-4">Cancel anytime · Instant activation</p>
-          </motion.div>
-        </div>
+              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-brand-green text-[#0D0F14] text-[11px] font-bold px-4 py-1 rounded-full whitespace-nowrap">
+                {billingCycle === 'monthly' ? 'MOST POPULAR' : 'BEST VALUE'}
+              </div>
+
+              <div className="mb-8">
+                <h3 className="text-[12px] font-display uppercase tracking-widest text-brand-green mb-4">Pro</h3>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-baseline gap-1">
+                    <AnimatePresence mode="wait">
+                      <motion.span 
+                        key={billingCycle}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="text-5xl font-display"
+                      >
+                        ₹{billingCycle === 'monthly' ? '69' : '799'}
+                      </motion.span>
+                    </AnimatePresence>
+                    <span className="text-sm font-mono text-text-muted">/{billingCycle === 'monthly' ? 'month' : 'year'}</span>
+                  </div>
+                  {billingCycle === 'yearly' && (
+                    <div className="flex flex-col gap-1 mt-2">
+                      <span className="text-xs font-mono text-brand-green">₹66/mo equivalent</span>
+                      <span className="inline-block bg-brand-green/10 border border-brand-green/20 text-[10px] text-brand-green px-2 py-1 rounded w-fit font-bold">
+                        2 months free · Save ₹29/mo
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex-1 flex flex-col gap-4 mb-8">
+                <FeatureItem icon={Check} text="Unlimited statement uploads" color="text-brand-green" />
+                <FeatureItem icon={Check} text="AI auto-categorization" color="text-brand-green" />
+                <FeatureItem icon={Check} text="Full analytics suite (8 charts)" color="text-brand-green" />
+                <FeatureItem icon={Check} text="Unlimited bank accounts" color="text-brand-green" />
+                <FeatureItem icon={Check} text="Unlimited AI queries" color="text-brand-green" />
+                <FeatureItem icon={Check} text="AI monthly reports & insights" color="text-brand-green" />
+                <FeatureItem icon={Check} text="CSV & PDF export" color="text-brand-green" />
+                <FeatureItem icon={Check} text="Anomaly detection & alerts" color="text-brand-green" />
+                <FeatureItem icon={Check} text="Subscription tracker" color="text-brand-green" />
+                <FeatureItem icon={Check} text="Priority support" color="text-brand-green" />
+              </div>
+
+              <button 
+                onClick={() => handleUpgrade(proPlan.id)}
+                disabled={isUpgrading === proPlan.id}
+                className="w-full py-4 rounded-xl font-ui font-bold text-sm transition-all shadow-lg shadow-brand-green/20 bg-brand-green text-[#0D0F14] hover:bg-brand-green/90 active:scale-[0.98]"
+              >
+                {isUpgrading === proPlan.id ? 'Processing...' : `Upgrade to Pro`}
+              </button>
+              <p className="text-center text-[10px] font-mono text-text-muted mt-4">Cancel anytime · Instant activation</p>
+            </motion.div>
+          </div>
+        )}
 
         {/* FAQ Section */}
         <div className="w-full max-w-2xl mt-12">
@@ -261,6 +304,3 @@ function FAQItem({ question, answer }: { question: string, answer: string }) {
   )
 }
 
-function isProPlan(plan?: string) {
-  return plan === 'pro_monthly' || plan === 'pro_annual'
-}

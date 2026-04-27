@@ -22,19 +22,19 @@ interface Subscription {
 }
 
 export default function SubscriptionsPage() {
-  // Fetch transactions from the last 3 months to identify patterns
+  // Fetch transactions from the last 14 months to identify patterns (including yearly)
   const { data: txData, isLoading } = useQuery({
     queryKey: ['transactions', 'subscriptions-check'],
     queryFn: async () => {
-      const start = format(subMonths(new Date(), 3), 'yyyy-MM-dd')
-      const res = await fetch(`/api/transactions?start_date=${start}&limit=1000`)
+      const start = format(subMonths(new Date(), 14), 'yyyy-MM-dd')
+      const res = await fetch(`/api/transactions?start_date=${start}&limit=5000`)
       return res.json()
     }
   })
 
   // Refined logic to identify subscriptions: 
   // 1. Recurring keywords (SI, AUTOPAY, NACH, etc.)
-  // 2. Consistent interval (approx 25-35 days for monthly)
+  // 2. Consistent interval (approx 25-35 days for monthly, 350-380 for yearly)
   // 3. Same merchant and consistent amount
   const detectedSubscriptions = useMemo(() => {
     if (!txData?.transactions) return []
@@ -51,7 +51,7 @@ export default function SubscriptionsPage() {
     
     const RECURRING_KEYWORDS = [
       'SI ', 'STANDING INSTRUCTION', 'AUTOPAY', 'RECURRING', 
-      'NACH', 'ACH ', 'ECS ', 'MANDATE', 'BILLPAY'
+      'NACH', 'ACH ', 'ECS ', 'MANDATE', 'BILLPAY', 'SUBSCRIPTION'
     ]
 
     const subs: Subscription[] = []
@@ -60,8 +60,10 @@ export default function SubscriptionsPage() {
       
       if (txs.length >= 2) {
         const amounts = txs.map(t => Number(t.amount))
-        const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length
-        const isConsistentAmount = amounts.every(a => Math.abs(a - avgAmount) < Math.max(50, avgAmount * 0.1))
+        // Use the last 3 amounts to determine the average, to account for recent price changes
+        const recentAmounts = amounts.slice(-3)
+        const avgAmount = recentAmounts.reduce((a, b) => a + b, 0) / recentAmounts.length
+        const isConsistentAmount = recentAmounts.every(a => Math.abs(a - avgAmount) < Math.max(50, avgAmount * 0.15))
         
         // Check for recurring indicators
         const hasRecurringKeyword = txs.some(t => {
@@ -69,37 +71,55 @@ export default function SubscriptionsPage() {
           return RECURRING_KEYWORDS.some(kw => desc.includes(kw))
         })
 
-        // Check for interval consistency (approx 28-32 days)
-        let hasMonthlyInterval = false
-        if (txs.length >= 2) {
-          const intervals = []
-          for (let i = 1; i < txs.length; i++) {
-            const d1 = new Date(txs[i-1].date)
-            const d2 = new Date(txs[i].date)
-            const diffDays = Math.ceil(Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24))
-            intervals.push(diffDays)
-          }
-          // If any interval is roughly a month (25-35 days) or a year (350-380 days)
-          hasMonthlyInterval = intervals.some(days => (days >= 25 && days <= 35) || (days >= 350 && days <= 380))
+        // Check for interval consistency
+        let isMonthly = false
+        let isYearly = false
+        
+        const intervals = []
+        for (let i = 1; i < txs.length; i++) {
+          const d1 = new Date(txs[i-1].date)
+          const d2 = new Date(txs[i].date)
+          const diffDays = Math.ceil(Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24))
+          intervals.push(diffDays)
         }
+        
+        isMonthly = intervals.some(days => (days >= 25 && days <= 35))
+        isYearly = intervals.some(days => (days >= 350 && days <= 380))
 
         // A transaction is a subscription if:
         // (Has keyword AND consistent amount) OR (Consistent interval AND consistent amount)
-        if (isConsistentAmount && (hasRecurringKeyword || hasMonthlyInterval)) {
+        if (isConsistentAmount && (hasRecurringKeyword || isMonthly || isYearly)) {
+          const frequency = isYearly ? 'Yearly' : 'Monthly'
+          
+          const lastTxDate = new Date(txs[txs.length - 1].date)
+          const estimatedNextBilling = new Date(lastTxDate)
+          estimatedNextBilling.setDate(estimatedNextBilling.getDate() + (isYearly ? 365 : 30))
+          
+          const today = new Date()
+          const daysOverdue = Math.ceil((today.getTime() - estimatedNextBilling.getTime()) / (1000 * 60 * 60 * 24))
+          
+          // If a subscription is missed by more than 15 days (monthly) or 30 days (yearly), it's 'At Risk' (possibly cancelled)
+          const status = daysOverdue > (isYearly ? 30 : 15) ? 'At Risk' : 'Active'
+
           subs.push({
             merchant,
             amount: avgAmount,
             category: txs[0].category || 'Other',
-            frequency: 'Monthly', // Could be refined based on intervals
-            nextBilling: format(new Date(), 'dd MMM'),
-            status: 'Active'
+            frequency,
+            nextBilling: format(estimatedNextBilling, 'dd MMM yyyy'),
+            status
           })
         }
       }
     })
     
-    return subs
+    return subs.sort((a, b) => new Date(a.nextBilling).getTime() - new Date(b.nextBilling).getTime())
   }, [txData])
+
+  const activeSubs = detectedSubscriptions.filter(s => s.status === 'Active')
+  const atRiskSubs = detectedSubscriptions.filter(s => s.status === 'At Risk')
+  const monthlyCommitment = activeSubs.reduce((acc, s) => acc + (s.frequency === 'Monthly' ? s.amount : s.amount / 12), 0)
+  const potentialSavings = atRiskSubs.reduce((acc, s) => acc + (s.frequency === 'Monthly' ? s.amount : s.amount / 12), 0)
 
   return (
     <div className="max-w-[1200px] mx-auto flex flex-col gap-8 pb-12">
@@ -125,17 +145,17 @@ export default function SubscriptionsPage() {
         <div className="bg-surface border border-border p-6 rounded-2xl">
           <span className="text-[10px] font-mono text-text-muted uppercase tracking-widest">Monthly commitment</span>
           <div className="text-3xl font-display text-white mt-1">
-            ₹{detectedSubscriptions.reduce((acc, s) => acc + s.amount, 0).toLocaleString()}
+            ₹{Math.round(monthlyCommitment).toLocaleString()}
           </div>
         </div>
         <div className="bg-surface border border-border p-6 rounded-2xl">
           <span className="text-[10px] font-mono text-text-muted uppercase tracking-widest">Active Subscriptions</span>
-          <div className="text-3xl font-display text-white mt-1">{detectedSubscriptions.length}</div>
+          <div className="text-3xl font-display text-white mt-1">{activeSubs.length}</div>
         </div>
         <div className="bg-surface border border-border p-6 rounded-2xl">
           <span className="text-[10px] font-mono text-text-muted uppercase tracking-widest">Upcoming Bills</span>
           <div className="text-3xl font-display text-brand-green mt-1">
-            {detectedSubscriptions.length} {detectedSubscriptions.length === 1 ? 'Bill' : 'Bills'}
+            {activeSubs.length} {activeSubs.length === 1 ? 'Bill' : 'Bills'}
           </div>
         </div>
       </div>
@@ -202,24 +222,31 @@ export default function SubscriptionsPage() {
         )}
       </div>
 
-      {/* Suggested to Cancel (AI Insights) */}
-      <div className="bg-red-400/5 border border-red-400/10 rounded-2xl p-6 mt-4">
-        <div className="flex items-start gap-4">
-          <div className="bg-red-400/20 p-2 rounded-lg">
-            <AlertCircle className="w-6 h-6 text-red-400" />
-          </div>
-          <div>
-            <h3 className="text-lg font-display text-white">Potential Savings Identified</h3>
-            <p className="text-sm font-mono text-text-muted mt-1 leading-relaxed">
-              We noticed 2 subscriptions that haven&apos;t been &quot;used&quot; (no associated activity) in the last 60 days. 
-              You could save <span className="text-red-400 font-bold">₹1,249/mo</span> by cancelling them.
-            </p>
-            <button className="mt-4 text-xs font-bold font-ui text-red-400 hover:underline">
-              View Inactive Subscriptions →
-            </button>
+      {/* Suggested to Cancel (AI Insights) - Only show if there are actual savings */}
+      {atRiskSubs.length > 0 && (
+        <div className="bg-red-400/5 border border-red-400/10 rounded-2xl p-6 mt-4">
+          <div className="flex items-start gap-4">
+            <div className="bg-red-400/20 p-2 rounded-lg shrink-0">
+              <AlertCircle className="w-6 h-6 text-red-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-display text-white">Potential Savings Identified</h3>
+              <p className="text-sm font-mono text-text-muted mt-1 leading-relaxed">
+                We noticed {atRiskSubs.length} subscription{atRiskSubs.length > 1 ? 's' : ''} that might be unused or cancelled (overdue for billing). 
+                If you officially cancelled them, you are saving <span className="text-red-400 font-bold">₹{Math.round(potentialSavings).toLocaleString()}/mo</span>!
+              </p>
+              
+              <div className="mt-4 flex flex-wrap gap-2">
+                {atRiskSubs.map((sub, idx) => (
+                  <span key={idx} className="text-xs font-mono bg-surface2 border border-border px-2 py-1 rounded text-text-muted flex items-center gap-2">
+                    {sub.merchant} <span className="text-red-400">₹{sub.amount.toLocaleString()}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
     </div>
   )

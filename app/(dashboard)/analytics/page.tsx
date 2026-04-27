@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { 
   Calendar, Filter, ArrowUpRight, 
   TrendingUp, ChevronDown, 
-  Info, Sparkles 
+  Info, Sparkles, RefreshCw, Lock
 } from 'lucide-react'
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -14,8 +14,7 @@ import {
 } from 'recharts'
 import { usePlanGate } from '@/hooks/useSubscription'
 import UpgradeModal from '@/components/subscription/UpgradeModal'
-import { Lock } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/db/client'
 import { Skeleton } from '@/components/ui/skeleton'
 import { User } from '@supabase/supabase-js'
@@ -224,6 +223,9 @@ export default function AnalyticsPage() {
     supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
   }, [supabase])
 
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const qc = useQueryClient()
+
   const { data: analytics, isLoading } = useQuery({
     queryKey: ['analytics', user?.id],
     queryFn: async (): Promise<AnalyticsData> => {
@@ -233,6 +235,12 @@ export default function AnalyticsPage() {
     },
     enabled: !!user?.id
   })
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    await qc.invalidateQueries({ queryKey: ['analytics'] })
+    setIsRefreshing(false)
+  }
 
   // Set default selected category once data loads
   useEffect(() => {
@@ -286,6 +294,15 @@ export default function AnalyticsPage() {
               <ChevronDown className="w-4 h-4 ml-auto text-text-muted" />
             </button>
           </div>
+          <button 
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 bg-surface border border-border px-4 py-2.5 rounded-xl text-sm font-ui hover:border-brand-green/50 transition-all text-white disabled:opacity-50"
+            title="Refresh analytics"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-brand-green' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
         </div>
       </div>
 

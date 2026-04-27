@@ -32,7 +32,8 @@ async function parsePdf(buffer: ArrayBuffer): Promise<ParseResult> {
       
       const sortedY = Object.keys(linesMap).map(Number).sort((a, b) => b - a)
       
-      for (const y of sortedY) {
+      for (let j = 0; j < sortedY.length; j++) {
+        const y = sortedY[j]
         const lineItems = linesMap[y].sort((a, b) => a.transform[4] - b.transform[4])
         const lineText = lineItems.map(item => item.str).join(' ').trim()
         
@@ -57,11 +58,12 @@ async function parsePdf(buffer: ArrayBuffer): Promise<ParseResult> {
           continue
         }
 
-        // HDFC PDF Date format: DD/MM/YY
-        const dateMatch = lineText.match(/^(\d{2}\/\d{2}\/\d{2})\s+/)
+        // HDFC PDF Date format: DD/MM/YY or DD/MM/YYYY
+        const dateMatch = lineText.match(/^(\d{2}\/\d{2}\/(?:\d{4}|\d{2}))\s+/)
         if (dateMatch) {
           const dateStr = dateMatch[1]
-          const [dd, mm, yyShort] = dateStr.split('/')
+          const [dd, mm, yyRaw] = dateStr.split('/')
+          const yyShort = yyRaw.length === 4 ? yyRaw.slice(-2) : yyRaw
           const dateIso = `20${yyShort}-${mm}-${dd}`
           
           let amount = 0
@@ -69,15 +71,18 @@ async function parsePdf(buffer: ArrayBuffer): Promise<ParseResult> {
           let balance = 0
           let description = ''
           
+          // Helper to check if a line part is within narration column
+          const isNarration = (x: number) => {
+             if (narrationX) return x >= narrationX - 5 && x < Math.min(withdrawalX || 999, depositX || 999) - 10
+             return x > 60 && x < Math.min(withdrawalX || 450, depositX || 450) - 10
+          }
+
           lineItems.forEach(item => {
             const x = item.transform[4]
             const val = parseFloat(item.str.replace(/,/g, ''))
             
             if (isNaN(val)) {
-              // Narration column
-              if (narrationX && x >= narrationX && x < Math.min(withdrawalX || 999, depositX || 999)) {
-                description += ' ' + item.str
-              } else if (!narrationX && x > 80 && x < 350) {
+              if (isNarration(x)) {
                 description += ' ' + item.str
               }
             } else {
@@ -94,6 +99,45 @@ async function parsePdf(buffer: ArrayBuffer): Promise<ParseResult> {
             }
           })
           
+          // LOOK AHEAD for multi-line description
+          let k = j + 1
+          while (k < sortedY.length) {
+            const nextLineItems = linesMap[sortedY[k]].sort((a, b) => a.transform[4] - b.transform[4])
+            const nextLineText = nextLineItems.map(item => item.str).join(' ').trim()
+            
+            // If next line has a date, it's a new transaction
+            if (nextLineText.match(/^\d{2}\/\d{2}\/(?:\d{4}|\d{2})/)) break
+            
+            // If next line has amount/balance in their columns, it's likely not just description
+            const hasValues = nextLineItems.some(item => {
+               const x = item.transform[4]
+               const val = parseFloat(item.str.replace(/,/g, ''))
+               return !isNaN(val) && (
+                  (withdrawalX && Math.abs(x - withdrawalX) < 30) ||
+                  (depositX && Math.abs(x - depositX) < 30) ||
+                  (balanceX && Math.abs(x - balanceX) < 30)
+               )
+            })
+            if (hasValues) break
+
+            const extraDesc = nextLineItems
+              .filter(item => isNarration(item.transform[4]))
+              .map(item => item.str)
+              .join(' ')
+              .trim()
+            
+            if (extraDesc) {
+              description += ' ' + extraDesc
+            } else {
+              // If no narration content found and it's not a new transaction, 
+              // it might be a sub-header or page footer. Stop looking.
+              if (nextLineText.length > 0) break 
+            }
+            k++
+          }
+          // Update the outer loop index to skip the lines we just consumed
+          j = k - 1
+
           if (amount > 0) {
             transactions.push({
               date: dateIso,

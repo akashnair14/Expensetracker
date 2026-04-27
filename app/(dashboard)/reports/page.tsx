@@ -36,6 +36,7 @@ export default function ReportsPage() {
   const { isPro } = usePlanGate()
 
   const currentMonth = format(new Date(), 'yyyy-MM')
+  const currentMonthName = format(new Date(), 'MMMM')
 
   // Fetch Reports
   const { data: reports = [], isLoading: reportsLoading } = useQuery<MonthlyReport[]>({
@@ -47,6 +48,7 @@ export default function ReportsPage() {
   })
 
   const selectedReport = reports.find(r => r.id === selectedReportId) || reports[0]
+  const hasCurrentMonthReport = reports.some(r => r.month === currentMonth)
 
   const generationSteps = [
     'Collecting transaction data',
@@ -86,8 +88,9 @@ export default function ReportsPage() {
     }
   })
 
-  const handleGenerate = () => {
-    mutation.mutate(currentMonth)
+  const handleGenerate = (monthToGenerate?: string | React.MouseEvent) => {
+    const targetMonth = typeof monthToGenerate === 'string' ? monthToGenerate : currentMonth
+    mutation.mutate(targetMonth)
   }
 
   const renderContent = (content: string) => {
@@ -171,7 +174,13 @@ export default function ReportsPage() {
             <h3 className="text-sm font-ui text-white font-bold">AI Insight</h3>
           </div>
           <p className="text-xs font-mono text-white/70 leading-relaxed">
-            Your recurring subscriptions have increased by <span className="text-brand-green">12%</span> this month. Review them to save ₹1,200.
+            {reportsLoading ? 'Analyzing...' : reports.length === 0 ? (
+              'Generate your first report to unlock personalized AI insights and savings recommendations based on your spending patterns.'
+            ) : selectedReport ? (
+              (selectedReport.stats?.savingsRate || 0) > 20 
+                ? `Great job! Your savings rate for ${format(new Date(selectedReport.month + '-01'), 'MMMM')} was ${selectedReport.stats.savingsRate}%. Keep up the excellent financial habits!`
+                : `Your savings rate for ${format(new Date(selectedReport.month + '-01'), 'MMMM')} was ${selectedReport.stats?.savingsRate || 0}%. Let's look for ways to optimize your spending this month.`
+            ) : ''}
           </p>
         </div>
       </div>
@@ -187,12 +196,12 @@ export default function ReportsPage() {
           </div>
           
           <button 
-            onClick={handleGenerate}
-            disabled={isGenerating}
+            onClick={() => handleGenerate()}
+            disabled={isGenerating || reportsLoading}
             className="flex items-center gap-2 bg-brand-blue text-white px-6 py-3 rounded-xl font-ui font-bold hover:bg-brand-blue/90 transition-all shadow-lg shadow-brand-blue/20 disabled:opacity-50"
           >
             {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Generate {format(new Date(), 'MMMM')} Report
+            {isGenerating ? 'Generating...' : hasCurrentMonthReport ? `Regenerate ${currentMonthName} Report` : `Generate ${currentMonthName} Report`}
           </button>
         </div>
 
@@ -250,7 +259,12 @@ export default function ReportsPage() {
                   <button className="p-3 bg-surface2 border border-border rounded-xl text-white hover:border-brand-blue transition-all" title="Share">
                     <Share2 className="w-5 h-5" />
                   </button>
-                  <button className="flex items-center gap-2 bg-white text-[#0D0F14] px-5 py-3 rounded-xl font-ui font-bold hover:bg-white/90 transition-all">
+                  <button 
+                    onClick={() => handleGenerate(selectedReport.month)}
+                    disabled={isGenerating}
+                    className="flex items-center gap-2 bg-white text-[#0D0F14] px-5 py-3 rounded-xl font-ui font-bold hover:bg-white/90 transition-all disabled:opacity-50"
+                  >
+                    {isGenerating ? <Loader2 className="w-4 h-4 animate-spin text-brand-blue" /> : <RefreshCw className="w-4 h-4" />}
                     Regenerate
                   </button>
                 </div>
@@ -303,10 +317,12 @@ export default function ReportsPage() {
               Generate your first AI-powered monthly report to get deep insights into your spending habits.
             </p>
             <button 
-              onClick={handleGenerate}
-              className="bg-brand-blue text-white px-8 py-3 rounded-xl font-ui font-bold hover:bg-brand-blue/90 transition-all"
+              onClick={() => handleGenerate()}
+              disabled={isGenerating || reportsLoading}
+              className="bg-brand-blue text-white px-8 py-3 rounded-xl font-ui font-bold hover:bg-brand-blue/90 transition-all disabled:opacity-50 flex items-center gap-2"
             >
-              Generate {format(new Date(), 'MMMM')} Report
+              {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              {isGenerating ? 'Generating...' : hasCurrentMonthReport ? `Regenerate ${currentMonthName} Report` : `Generate ${currentMonthName} Report`}
             </button>
           </div>
         )}

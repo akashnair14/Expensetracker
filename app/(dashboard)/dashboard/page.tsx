@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowUpRight, ArrowDownRight, Sparkles, ArrowRight } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowUpRight, ArrowDownRight, Sparkles, ArrowRight, RefreshCw } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Legend, CartesianGrid } from 'recharts'
 import { format } from 'date-fns'
 import { createClient } from '@/lib/db/client'
@@ -56,6 +56,9 @@ export default function DashboardPage() {
     const timer = setTimeout(() => setMounted(true), 100)
     return () => clearTimeout(timer)
   }, [])
+  
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const qc = useQueryClient()
   const [dateRange, setDateRange] = useState<'month' | '3months' | '6months' | 'all'>('all')
 
   const getDateRange = () => {
@@ -72,6 +75,13 @@ export default function DashboardPage() {
       return { start: start.toISOString().split('T')[0], end: now.toISOString().split('T')[0] }
     }
     return { start: null, end: null } // All time
+  }
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    await qc.invalidateQueries({ queryKey: ['transactions'] })
+    await qc.invalidateQueries({ queryKey: ['budgets'] })
+    setIsRefreshing(false)
   }
 
   const { start: startDate, end: endDate } = getDateRange()
@@ -182,6 +192,15 @@ export default function DashboardPage() {
               {r === 'month' ? 'This Month' : r === '3months' ? '3 Months' : r === '6months' ? '6 Months' : 'All Time'}
             </button>
           ))}
+          
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className={`p-2 rounded-full bg-surface2 border border-border text-text-muted hover:text-white hover:border-brand-green/50 transition-colors disabled:opacity-50 ${isRefreshing ? 'bg-brand-green/10' : ''}`}
+            title="Refresh dashboard"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-brand-green' : ''}`} />
+          </button>
         </div>
       </div>
 

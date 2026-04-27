@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useQueryClient } from '@tanstack/react-query'
 import { 
   Upload as UploadIcon, X, CheckCircle,
   FileText, FileSpreadsheet, Lock, AlertCircle 
@@ -40,6 +41,7 @@ export default function UploadPage() {
   
   const supabase = createClient()
   const router = useRouter()
+  const qc = useQueryClient()
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const f = acceptedFiles[0]
@@ -149,8 +151,16 @@ export default function UploadPage() {
 
       // ── Done: redirect to dashboard ──
       setUploadState('done')
+      
+      // Invalidate queries to ensure fresh data
+      await qc.invalidateQueries({ queryKey: ['transactions'] })
+      await qc.invalidateQueries({ queryKey: ['budgets'] })
+      
       // Small pause so user sees "Done" state briefly before redirect
       await new Promise(resolve => setTimeout(resolve, 800))
+      
+      // Refresh the page data and redirect
+      router.refresh()
       router.push('/dashboard')
 
     } catch (error) {

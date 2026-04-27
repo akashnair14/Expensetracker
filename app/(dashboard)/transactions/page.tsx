@@ -242,7 +242,16 @@ function TransactionsContent() {
           )}
         </div>
 
-        <div className="md:ml-auto">
+        <div className="md:ml-auto flex items-center gap-2">
+          <button 
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 bg-surface2 border border-border hover:border-brand-green/30 text-white px-4 py-2.5 rounded-lg text-sm font-ui transition-colors shrink-0 disabled:opacity-50"
+            title="Refresh transactions"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-brand-green' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
           <button className="flex items-center gap-2 bg-surface2 border border-border hover:border-brand-green/30 text-white px-4 py-2.5 rounded-lg text-sm font-ui transition-colors shrink-0">
             <Download className="w-4 h-4" /> Export CSV
           </button>

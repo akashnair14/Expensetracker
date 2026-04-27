@@ -73,11 +73,13 @@ export async function POST(request: Request) {
       description: string;
       is_debit: boolean;
       merchant?: string;
+      upload_id?: string;
     }
 
     interface FinalTransaction extends TempTransaction {
       merchant: string;
       category: string;
+      upload_id?: string;
     }
 
     // Apply categories and filter to valid DB columns
@@ -110,7 +112,8 @@ export async function POST(request: Request) {
         description: tx.description,
         is_debit: tx.is_debit,
         merchant: finalMerchant,
-        category: finalCategory
+        category: finalCategory,
+        upload_id: tx.upload_id
       }
     })
 
